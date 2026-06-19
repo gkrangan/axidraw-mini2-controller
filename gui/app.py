@@ -700,7 +700,7 @@ class App(ctk.CTk):
     def _build_settings_tab(self, parent):
         parent.grid_columnconfigure(1, weight=1)
 
-        c = self._config
+        c = self._cfg
         row = 0
 
         # ---- Pen angle selector ----
@@ -816,7 +816,7 @@ class App(ctk.CTk):
             self._log("Disconnected from AxiDraw.")
         else:
             self._apply_settings()
-            self._plotter = Plotter(self._config)
+            self._plotter = Plotter(self._cfg)
             try:
                 self._plotter.connect()
                 self._lbl_status.configure(text="● Connected", text_color="green")
@@ -1117,34 +1117,34 @@ class App(ctk.CTk):
     def _apply_settings(self):
         e = self._settings_entries
         try:
-            self._config.pen_angle = int(self._pen_angle_var.get().rstrip("°"))
-            self._config.pen_pos_down = int(e["pen_pos_down"].get())
-            self._config.pen_pos_up = int(e["pen_pos_up"].get())
-            self._config.speed_pendown = int(e["speed_pendown"].get())
-            self._config.speed_penup = int(e["speed_penup"].get())
-            self._config.pen_delay_down = int(e["pen_delay_down"].get())
-            self._config.pen_delay_up = int(e["pen_delay_up"].get())
-            self._config.x_max_mm = float(e["x_max_mm"].get())
-            self._config.y_max_mm = float(e["y_max_mm"].get())
-            self._config.const_speed = bool(self._const_speed.get())
+            self._cfg.pen_angle = int(self._pen_angle_var.get().rstrip("°"))
+            self._cfg.pen_pos_down = int(e["pen_pos_down"].get())
+            self._cfg.pen_pos_up = int(e["pen_pos_up"].get())
+            self._cfg.speed_pendown = int(e["speed_pendown"].get())
+            self._cfg.speed_penup = int(e["speed_penup"].get())
+            self._cfg.pen_delay_down = int(e["pen_delay_down"].get())
+            self._cfg.pen_delay_up = int(e["pen_delay_up"].get())
+            self._cfg.x_max_mm = float(e["x_max_mm"].get())
+            self._cfg.y_max_mm = float(e["y_max_mm"].get())
+            self._cfg.const_speed = bool(self._const_speed.get())
             port_val = e["port"].get().strip()
-            self._config.port = port_val if port_val else None
+            self._cfg.port = port_val if port_val else None
             # raises ValueError if limits are out of range
-            self._config._validate_limits()
+            self._cfg._validate_limits()
         except ValueError as ex:
             mb.showerror("Settings Error", str(ex))
             return
 
         if self._plotter and self._plotter.connected:
             self._plotter.update_config(**{
-                k: getattr(self._config, k)
+                k: getattr(self._cfg, k)
                 for k in ["pen_angle", "pen_pos_down", "pen_pos_up",
                           "speed_pendown", "speed_penup",
                           "pen_delay_down", "pen_delay_up",
                           "x_max_mm", "y_max_mm", "const_speed", "port"]
             })
 
-        save_config(self._config)
+        save_config(self._cfg)
         self._log(f"Settings saved to {config_path().name}.")
 
     # ------------------------------------------------------------------
