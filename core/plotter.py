@@ -23,8 +23,8 @@ except ImportError:
 class PlotterConfig:
     speed_pendown: int = 25       # pen-down move speed (1–100)
     speed_penup: int = 75         # pen-up move speed (1–100)
-    pen_pos_down: int = 40        # servo position when pen is down (0–100)
-    pen_pos_up: int = 60          # servo position when pen is up (0–100)
+    pen_pos_down: int = 5         # servo position when pen is down (0–100); 45-deg mount
+    pen_pos_up: int = 30          # servo position when pen is up (0–100); 45-deg mount
     pen_delay_down: int = 0       # ms delay after lowering pen
     pen_delay_up: int = 0         # ms delay after raising pen
     const_speed: bool = False     # constant speed mode

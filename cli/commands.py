@@ -8,6 +8,7 @@ from pathlib import Path
 
 from core.plotter import Plotter, PlotterConfig, PlotterError
 from core.image_trace import is_raster, trace_to_svg
+from core.config_io import load_config
 from core import shapes
 
 
@@ -16,19 +17,22 @@ def build_parser() -> argparse.ArgumentParser:
         prog="axidraw",
         description="AxiDraw Mini 2 controller CLI",
     )
-    p.add_argument("--port", help="Serial port (default: auto-detect)")
-    p.add_argument("--speed-down", type=int, default=25, metavar="N",
-                   help="Pen-down speed 1–100 (default: 25)")
-    p.add_argument("--speed-up", type=int, default=75, metavar="N",
-                   help="Pen-up speed 1–100 (default: 75)")
-    p.add_argument("--pen-down", type=int, default=40, dest="pen_pos_down",
-                   help="Pen-down servo position 0–100 (default: 40)")
-    p.add_argument("--pen-up", type=int, default=60, dest="pen_pos_up",
-                   help="Pen-up servo position 0–100 (default: 60)")
-    p.add_argument("--x-max", type=float, default=140.0, dest="x_max_mm",
-                   help="X-axis travel limit in mm, max 150 (default: 140)")
-    p.add_argument("--y-max", type=float, default=90.0, dest="y_max_mm",
-                   help="Y-axis travel limit in mm, max 100 (default: 90)")
+    # All flags default to None so we can detect which were explicitly passed
+    # and let the .cfg file supply the real defaults for the rest.
+    p.add_argument("--port", default=None,
+                   help="Serial port (default: from config file, then auto-detect)")
+    p.add_argument("--speed-down", type=int, default=None, metavar="N",
+                   dest="speed_pendown", help="Pen-down speed 1–100")
+    p.add_argument("--speed-up", type=int, default=None, metavar="N",
+                   dest="speed_penup", help="Pen-up speed 1–100")
+    p.add_argument("--pen-down", type=int, default=None, dest="pen_pos_down",
+                   help="Pen-down servo position 0–100")
+    p.add_argument("--pen-up", type=int, default=None, dest="pen_pos_up",
+                   help="Pen-up servo position 0–100")
+    p.add_argument("--x-max", type=float, default=None, dest="x_max_mm",
+                   help="X-axis travel limit in mm, max 150")
+    p.add_argument("--y-max", type=float, default=None, dest="y_max_mm",
+                   help="Y-axis travel limit in mm, max 100")
 
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -78,15 +82,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def make_config(args) -> PlotterConfig:
-    return PlotterConfig(
-        speed_pendown=args.speed_down,
-        speed_penup=args.speed_up,
-        pen_pos_down=args.pen_pos_down,
-        pen_pos_up=args.pen_pos_up,
-        x_max_mm=args.x_max_mm,
-        y_max_mm=args.y_max_mm,
-        port=getattr(args, "port", None),
-    )
+    """Load config from .cfg file, then apply any CLI overrides."""
+    cfg = load_config()
+    overrides = {
+        "speed_pendown": args.speed_pendown,
+        "speed_penup":   args.speed_penup,
+        "pen_pos_down":  args.pen_pos_down,
+        "pen_pos_up":    args.pen_pos_up,
+        "x_max_mm":      args.x_max_mm,
+        "y_max_mm":      args.y_max_mm,
+        "port":          args.port,
+    }
+    for field, value in overrides.items():
+        if value is not None:
+            setattr(cfg, field, value)
+    cfg._validate_limits()
+    return cfg
 
 
 def run(argv=None):

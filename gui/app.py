@@ -14,6 +14,7 @@ import customtkinter as ctk
 
 from core.plotter import Plotter, PlotterConfig, PlotterError
 from core.image_trace import is_raster, trace_to_svg, SUPPORTED_RASTER
+from core.config_io import load_config, save_config, config_path
 from core import shapes
 
 ctk.set_appearance_mode("dark")
@@ -36,7 +37,7 @@ class App(ctk.CTk):
         self.resizable(True, True)
 
         self._plotter: Optional[Plotter] = None
-        self._config = PlotterConfig()
+        self._config = load_config()
         self._file_path: Optional[str] = None   # currently loaded file
         self._svg_path: Optional[str] = None    # SVG ready to plot (may be traced)
 
@@ -256,16 +257,17 @@ class App(ctk.CTk):
     def _build_settings_tab(self, parent):
         parent.grid_columnconfigure(1, weight=1)
 
+        c = self._config
         fields = [
-            ("Speed (pen down)", "speed_pendown", "25"),
-            ("Speed (pen up)", "speed_penup", "75"),
-            ("Pen pos down (0–100)", "pen_pos_down", "40"),
-            ("Pen pos up (0–100)", "pen_pos_up", "60"),
-            ("Pen delay down (ms)", "pen_delay_down", "0"),
-            ("Pen delay up (ms)", "pen_delay_up", "0"),
-            ("X-axis limit mm  (max 150)", "x_max_mm", "140"),
-            ("Y-axis limit mm  (max 100)", "y_max_mm", "90"),
-            ("Serial port (blank=auto)", "port", ""),
+            ("Speed (pen down)",          "speed_pendown",  str(c.speed_pendown)),
+            ("Speed (pen up)",            "speed_penup",    str(c.speed_penup)),
+            ("Pen pos down (0–100)",      "pen_pos_down",   str(c.pen_pos_down)),
+            ("Pen pos up (0–100)",        "pen_pos_up",     str(c.pen_pos_up)),
+            ("Pen delay down (ms)",       "pen_delay_down", str(c.pen_delay_down)),
+            ("Pen delay up (ms)",         "pen_delay_up",   str(c.pen_delay_up)),
+            ("X-axis limit mm  (max 150)", "x_max_mm",      str(c.x_max_mm)),
+            ("Y-axis limit mm  (max 100)", "y_max_mm",      str(c.y_max_mm)),
+            ("Serial port (blank=auto)",  "port",           c.port or ""),
         ]
         self._settings_entries: dict[str, ctk.CTkEntry] = {}
         for i, (label, key, default) in enumerate(fields):
@@ -277,10 +279,20 @@ class App(ctk.CTk):
 
         row = len(fields)
         self._const_speed = ctk.CTkCheckBox(parent, text="Constant speed mode")
+        if c.const_speed:
+            self._const_speed.select()
         self._const_speed.grid(row=row, column=0, columnspan=2, padx=12, pady=8, sticky="w")
 
-        ctk.CTkButton(parent, text="Apply Settings", command=self._apply_settings).grid(
-            row=row + 1, column=0, columnspan=2, padx=12, pady=8, sticky="ew"
+        cfg_label = ctk.CTkLabel(
+            parent,
+            text=f"Config file: {config_path().name}",
+            font=("", 10),
+            text_color="gray",
+        )
+        cfg_label.grid(row=row + 1, column=0, columnspan=2, padx=12, pady=(0, 4), sticky="w")
+
+        ctk.CTkButton(parent, text="Apply & Save Settings", command=self._apply_settings).grid(
+            row=row + 2, column=0, columnspan=2, padx=12, pady=8, sticky="ew"
         )
 
     # ------------------------------------------------------------------
@@ -541,7 +553,9 @@ class App(ctk.CTk):
                           "pen_pos_up", "pen_delay_down", "pen_delay_up",
                           "x_max_mm", "y_max_mm", "const_speed", "port"]
             })
-        self._log("Settings applied.")
+
+        save_config(self._config)
+        self._log(f"Settings saved to {config_path().name}.")
 
     # ------------------------------------------------------------------
     # Threading helper
