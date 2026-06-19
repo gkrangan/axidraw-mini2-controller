@@ -127,11 +127,13 @@ class App(ctk.CTk):
         tabs.grid(row=0, column=1, sticky="nsew", padx=12, pady=12)
         tabs.add("Draw Shapes")
         tabs.add("Image Trace")
+        tabs.add("Manual Control")
         tabs.add("Settings")
         tabs.add("Log")
 
         self._build_shapes_tab(tabs.tab("Draw Shapes"))
         self._build_trace_tab(tabs.tab("Image Trace"))
+        self._build_manual_tab(tabs.tab("Manual Control"))
         self._build_settings_tab(tabs.tab("Settings"))
         self._build_log_tab(tabs.tab("Log"))
 
@@ -326,6 +328,221 @@ class App(ctk.CTk):
             self._outline_frame.grid()
 
     # ------------------------------------------------------------------
+    # Manual Control tab
+    # ------------------------------------------------------------------
+
+    def _build_manual_tab(self, parent):
+        parent.grid_columnconfigure(0, weight=1)
+        parent.grid_columnconfigure(1, weight=1)
+
+        row = 0
+        ctk.CTkLabel(parent, text="Manual Control", font=("", 14, "bold")).grid(
+            row=row, column=0, columnspan=2, pady=(8, 4), sticky="w", padx=8
+        )
+        row += 1
+
+        # ---- Position & home display ----
+        pos_frame = ctk.CTkFrame(parent)
+        pos_frame.grid(row=row, column=0, columnspan=2, padx=8, pady=(0, 8), sticky="ew")
+        pos_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+
+        ctk.CTkLabel(pos_frame, text="Position", font=("", 11, "bold")).grid(
+            row=0, column=0, columnspan=2, padx=8, pady=(6, 2), sticky="w"
+        )
+        ctk.CTkLabel(pos_frame, text="Home", font=("", 11, "bold")).grid(
+            row=0, column=2, columnspan=2, padx=8, pady=(6, 2), sticky="w"
+        )
+        for col, lbl in enumerate(["X (mm)", "Y (mm)", "Home X (mm)", "Home Y (mm)"]):
+            ctk.CTkLabel(pos_frame, text=lbl, font=("", 10), text_color="gray").grid(
+                row=1, column=col, padx=8, sticky="w"
+            )
+        self._lbl_pos_x    = ctk.CTkLabel(pos_frame, text="0.00", font=("Courier", 12))
+        self._lbl_pos_y    = ctk.CTkLabel(pos_frame, text="0.00", font=("Courier", 12))
+        self._lbl_home_x   = ctk.CTkLabel(pos_frame, text="0.00", font=("Courier", 12))
+        self._lbl_home_y   = ctk.CTkLabel(pos_frame, text="0.00", font=("Courier", 12))
+        self._lbl_pos_x.grid (row=2, column=0, padx=8, pady=(0, 8), sticky="w")
+        self._lbl_pos_y.grid (row=2, column=1, padx=8, pady=(0, 8), sticky="w")
+        self._lbl_home_x.grid(row=2, column=2, padx=8, pady=(0, 8), sticky="w")
+        self._lbl_home_y.grid(row=2, column=3, padx=8, pady=(0, 8), sticky="w")
+        row += 1
+
+        # ---- Pen control ----
+        ctk.CTkLabel(parent, text="Pen", font=("", 12, "bold")).grid(
+            row=row, column=0, columnspan=2, padx=8, pady=(4, 2), sticky="w"
+        )
+        row += 1
+        pen_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        pen_frame.grid(row=row, column=0, columnspan=2, padx=8, pady=(0, 6), sticky="ew")
+        self._btn_pen_up   = ctk.CTkButton(pen_frame, text="Pen Up",   width=120,
+                                            fg_color="#1f538d",
+                                            command=self._manual_pen_up)
+        self._btn_pen_down = ctk.CTkButton(pen_frame, text="Pen Down", width=120,
+                                            fg_color="#8d1f1f",
+                                            command=self._manual_pen_down)
+        self._btn_pen_up.pack(side="left", padx=(0, 8))
+        self._btn_pen_down.pack(side="left")
+        row += 1
+
+        # ---- Motor control ----
+        ctk.CTkLabel(parent, text="Motors", font=("", 12, "bold")).grid(
+            row=row, column=0, columnspan=2, padx=8, pady=(4, 2), sticky="w"
+        )
+        row += 1
+        motor_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        motor_frame.grid(row=row, column=0, columnspan=2, padx=8, pady=(0, 6), sticky="ew")
+        ctk.CTkButton(motor_frame, text="Enable Motors",  width=140,
+                      fg_color="green", hover_color="#1a7a1a",
+                      command=self._manual_motors_on).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(motor_frame, text="Disable Motors", width=140,
+                      fg_color="#555", hover_color="#333",
+                      command=self._manual_motors_off).pack(side="left")
+        row += 1
+
+        # ---- Home control ----
+        ctk.CTkLabel(parent, text="Home Position", font=("", 12, "bold")).grid(
+            row=row, column=0, columnspan=2, padx=8, pady=(4, 2), sticky="w"
+        )
+        row += 1
+        home_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        home_frame.grid(row=row, column=0, columnspan=2, padx=8, pady=(0, 6), sticky="ew")
+        ctk.CTkButton(home_frame, text="Set Home Here", width=150,
+                      command=self._manual_set_home).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(home_frame, text="Go to Home",    width=130,
+                      fg_color="green", hover_color="#1a7a1a",
+                      command=self._manual_go_home).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(home_frame, text="Go to Origin (0,0)", width=160,
+                      fg_color="#555", hover_color="#333",
+                      command=self._manual_go_origin).pack(side="left")
+        row += 1
+
+        # ---- Jog controls ----
+        ctk.CTkLabel(parent, text="Jog", font=("", 12, "bold")).grid(
+            row=row, column=0, columnspan=2, padx=8, pady=(4, 2), sticky="w"
+        )
+        row += 1
+
+        # Step size selector
+        step_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        step_frame.grid(row=row, column=0, columnspan=2, padx=8, pady=(0, 4), sticky="w")
+        ctk.CTkLabel(step_frame, text="Step size (mm):").pack(side="left", padx=(0, 8))
+        self._jog_step = ctk.CTkOptionMenu(
+            step_frame, values=["0.1", "0.5", "1", "5", "10", "20"], width=80
+        )
+        self._jog_step.set("1")
+        self._jog_step.pack(side="left")
+        row += 1
+
+        # Directional pad
+        jog_pad = ctk.CTkFrame(parent, fg_color="transparent")
+        jog_pad.grid(row=row, column=0, columnspan=2, padx=8, pady=(0, 8))
+
+        btn_cfg = dict(width=52, height=52)
+        ctk.CTkButton(jog_pad, text="↖", **btn_cfg, command=lambda: self._jog(-1, -1)).grid(row=0, column=0, padx=2, pady=2)
+        ctk.CTkButton(jog_pad, text="↑", **btn_cfg, command=lambda: self._jog( 0, -1)).grid(row=0, column=1, padx=2, pady=2)
+        ctk.CTkButton(jog_pad, text="↗", **btn_cfg, command=lambda: self._jog( 1, -1)).grid(row=0, column=2, padx=2, pady=2)
+        ctk.CTkButton(jog_pad, text="←", **btn_cfg, command=lambda: self._jog(-1,  0)).grid(row=1, column=0, padx=2, pady=2)
+        ctk.CTkButton(jog_pad, text="⌂", **btn_cfg, fg_color="green",
+                      command=self._manual_go_home).grid(row=1, column=1, padx=2, pady=2)
+        ctk.CTkButton(jog_pad, text="→", **btn_cfg, command=lambda: self._jog( 1,  0)).grid(row=1, column=2, padx=2, pady=2)
+        ctk.CTkButton(jog_pad, text="↙", **btn_cfg, command=lambda: self._jog(-1,  1)).grid(row=2, column=0, padx=2, pady=2)
+        ctk.CTkButton(jog_pad, text="↓", **btn_cfg, command=lambda: self._jog( 0,  1)).grid(row=2, column=1, padx=2, pady=2)
+        ctk.CTkButton(jog_pad, text="↘", **btn_cfg, command=lambda: self._jog( 1,  1)).grid(row=2, column=2, padx=2, pady=2)
+        row += 1
+
+        # ---- Move to XY ----
+        ctk.CTkLabel(parent, text="Move to Position (mm)", font=("", 12, "bold")).grid(
+            row=row, column=0, columnspan=2, padx=8, pady=(4, 2), sticky="w"
+        )
+        row += 1
+        xy_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        xy_frame.grid(row=row, column=0, columnspan=2, padx=8, pady=(0, 8), sticky="ew")
+        ctk.CTkLabel(xy_frame, text="X:").pack(side="left", padx=(0, 4))
+        self._move_x = ctk.CTkEntry(xy_frame, width=70, placeholder_text="mm")
+        self._move_x.pack(side="left", padx=(0, 12))
+        ctk.CTkLabel(xy_frame, text="Y:").pack(side="left", padx=(0, 4))
+        self._move_y = ctk.CTkEntry(xy_frame, width=70, placeholder_text="mm")
+        self._move_y.pack(side="left", padx=(0, 12))
+        ctk.CTkButton(xy_frame, text="Move", width=80,
+                      command=self._manual_move_to).pack(side="left")
+
+    # ------------------------------------------------------------------
+    # Manual control actions
+    # ------------------------------------------------------------------
+
+    def _update_position_display(self) -> None:
+        if self._plotter:
+            x_mm, y_mm = self._plotter.position_mm
+            hx_mm, hy_mm = self._plotter.home_mm
+            self._lbl_pos_x.configure(text=f"{x_mm:.2f}")
+            self._lbl_pos_y.configure(text=f"{y_mm:.2f}")
+            self._lbl_home_x.configure(text=f"{hx_mm:.2f}")
+            self._lbl_home_y.configure(text=f"{hy_mm:.2f}")
+
+    def _manual_pen_up(self) -> None:
+        self._run_action(lambda: self._plotter.pen_up(), "Pen raised.")
+        self._btn_pen_up.configure(fg_color="#2a6db5")
+        self._btn_pen_down.configure(fg_color="#8d1f1f")
+
+    def _manual_pen_down(self) -> None:
+        self._run_action(lambda: self._plotter.pen_down(), "Pen lowered.")
+        self._btn_pen_down.configure(fg_color="#b52a2a")
+        self._btn_pen_up.configure(fg_color="#1f538d")
+
+    def _manual_motors_on(self) -> None:
+        self._run_action(lambda: self._plotter.enable_motors(), "Motors enabled.")
+
+    def _manual_motors_off(self) -> None:
+        self._run_action(lambda: self._plotter.disable_motors(),
+                         "Motors disabled — carriage can be moved by hand.")
+
+    def _manual_set_home(self) -> None:
+        if not self._require_connection():
+            return
+        x_mm, y_mm = self._plotter.set_home()
+        self._log(f"Home set to ({x_mm:.2f}, {y_mm:.2f}) mm.")
+        self._update_position_display()
+
+    def _manual_go_home(self) -> None:
+        def _action():
+            self._plotter.go_home()
+            self.after(0, self._update_position_display)
+        self._run_action(_action, "Moved to home position.")
+
+    def _manual_go_origin(self) -> None:
+        def _action():
+            self._plotter.go_origin()
+            self.after(0, self._update_position_display)
+        self._run_action(_action, "Moved to machine origin (0, 0).")
+
+    def _jog(self, dx_dir: int, dy_dir: int) -> None:
+        if not self._require_connection():
+            return
+        try:
+            step = float(self._jog_step.get())
+        except ValueError:
+            step = 1.0
+        dx = dx_dir * step
+        dy = dy_dir * step
+        def _action():
+            self._plotter.jog(dx, dy)
+            self.after(0, self._update_position_display)
+        self._run_action(_action, f"Jogged ({dx:+.1f}, {dy:+.1f}) mm.")
+
+    def _manual_move_to(self) -> None:
+        if not self._require_connection():
+            return
+        try:
+            x_mm = float(self._move_x.get())
+            y_mm = float(self._move_y.get())
+        except ValueError:
+            mb.showerror("Input Error", "Enter valid X and Y values in mm.")
+            return
+        def _action():
+            self._plotter.move_to_mm(x_mm, y_mm)
+            self.after(0, self._update_position_display)
+        self._run_action(_action, f"Moved to ({x_mm:.2f}, {y_mm:.2f}) mm.")
+
+    # ------------------------------------------------------------------
     # Settings tab
     # ------------------------------------------------------------------
 
@@ -454,6 +671,7 @@ class App(ctk.CTk):
                 self._lbl_status.configure(text="● Connected", text_color="green")
                 self._btn_connect.configure(text="Disconnect")
                 self._log("Connected to AxiDraw Mini 2.")
+                self._update_position_display()
             except PlotterError as e:
                 self._plotter = None
                 mb.showerror("Connection Error", str(e))

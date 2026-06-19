@@ -72,16 +72,32 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--colormode", choices=["binary", "color", "layered"],
                     default="binary", help="Outline trace color mode (outline backend only)")
 
-    # home
-    sub.add_parser("home", help="Move pen to home position (0, 0)")
-
     # pen
     sp = sub.add_parser("pen", help="Raise or lower the pen")
     sp.add_argument("action", choices=["up", "down"])
 
     # motors
-    sp = sub.add_parser("motors", help="Enable or disable motors")
+    sp = sub.add_parser("motors", help="Enable or disable stepper motors")
     sp.add_argument("action", choices=["on", "off"])
+
+    # home
+    sub.add_parser("home", help="Move pen to the user-defined home position")
+
+    # origin
+    sub.add_parser("origin", help="Move pen to machine origin (0, 0) — where carriage was on connect")
+
+    # set-home
+    sub.add_parser("set-home", help="Mark the current pen position as the home position")
+
+    # move
+    sp = sub.add_parser("move", help="Move pen to an absolute position (pen up)")
+    sp.add_argument("x", type=float, help="X position in mm")
+    sp.add_argument("y", type=float, help="Y position in mm")
+
+    # jog
+    sp = sub.add_parser("jog", help="Move pen relative to current position (pen up)")
+    sp.add_argument("dx", type=float, help="X offset in mm (negative = left)")
+    sp.add_argument("dy", type=float, help="Y offset in mm (negative = up)")
 
     # draw-shape
     sp = sub.add_parser("draw-shape", help="Draw a basic shape")
@@ -164,11 +180,7 @@ def run(argv=None):
 def _dispatch(args, plotter: Plotter):
     cmd = args.command
 
-    if cmd == "home":
-        plotter.go_home()
-        print("Moved to home.")
-
-    elif cmd == "pen":
+    if cmd == "pen":
         if args.action == "up":
             plotter.pen_up(); print("Pen up.")
         else:
@@ -178,7 +190,30 @@ def _dispatch(args, plotter: Plotter):
         if args.action == "on":
             plotter.enable_motors(); print("Motors enabled.")
         else:
-            plotter.disable_motors(); print("Motors disabled.")
+            plotter.disable_motors()
+            print("Motors disabled — carriage can now be moved by hand.")
+
+    elif cmd == "home":
+        plotter.go_home()
+        x_mm, y_mm = plotter.position_mm
+        print(f"Moved to home ({x_mm:.2f}, {y_mm:.2f}) mm.")
+
+    elif cmd == "origin":
+        plotter.go_origin()
+        print("Moved to machine origin (0.00, 0.00) mm.")
+
+    elif cmd == "set-home":
+        x_mm, y_mm = plotter.set_home()
+        print(f"Home set to current position ({x_mm:.2f}, {y_mm:.2f}) mm.")
+
+    elif cmd == "move":
+        plotter.move_to_mm(args.x, args.y)
+        print(f"Moved to ({args.x:.2f}, {args.y:.2f}) mm.")
+
+    elif cmd == "jog":
+        plotter.jog(args.dx, args.dy)
+        x_mm, y_mm = plotter.position_mm
+        print(f"Jogged ({args.dx:+.2f}, {args.dy:+.2f}) mm → now at ({x_mm:.2f}, {y_mm:.2f}) mm.")
 
     elif cmd == "plot":
         _cmd_plot(args, plotter)

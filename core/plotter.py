@@ -90,6 +90,18 @@ class Plotter:
         self.config = config or PlotterConfig()
         self._ad: Optional[axidraw.AxiDraw] = None
 
+        # Software-tracked position (inches). Updated after every move.
+        self._pos_x: float = 0.0
+        self._pos_y: float = 0.0
+
+        # User-defined home position (inches). Defaults to origin.
+        self._home_x: float = 0.0
+        self._home_y: float = 0.0
+
+        # Pen state
+        self._pen_is_down: bool = False
+        self._motors_enabled: bool = True
+
     # ------------------------------------------------------------------
     # Connection
     # ------------------------------------------------------------------
@@ -102,6 +114,11 @@ class Plotter:
         if not self._ad.connect():
             self._ad = None
             raise PlotterError("Could not connect to AxiDraw. Check USB cable and port.")
+        # Reset tracked state on every fresh connection
+        self._pos_x = 0.0
+        self._pos_y = 0.0
+        self._pen_is_down = False
+        self._motors_enabled = True
 
     def disconnect(self) -> None:
         if self._ad:
@@ -167,30 +184,100 @@ class Plotter:
                 f"(0–{self.config.y_max_mm} mm)"
             )
 
+    # ------------------------------------------------------------------
+    # Position & state queries
+    # ------------------------------------------------------------------
+
+    @property
+    def position(self) -> tuple[float, float]:
+        """Current pen position in inches (software-tracked)."""
+        return self._pos_x, self._pos_y
+
+    @property
+    def position_mm(self) -> tuple[float, float]:
+        """Current pen position in mm (software-tracked)."""
+        return self._pos_x * MM_PER_INCH, self._pos_y * MM_PER_INCH
+
+    @property
+    def home(self) -> tuple[float, float]:
+        """User-defined home position in inches."""
+        return self._home_x, self._home_y
+
+    @property
+    def home_mm(self) -> tuple[float, float]:
+        """User-defined home position in mm."""
+        return self._home_x * MM_PER_INCH, self._home_y * MM_PER_INCH
+
+    @property
+    def pen_is_down(self) -> bool:
+        return self._pen_is_down
+
+    @property
+    def motors_enabled(self) -> bool:
+        return self._motors_enabled
+
+    # ------------------------------------------------------------------
+    # Pen
+    # ------------------------------------------------------------------
+
     def pen_up(self) -> None:
         self._require_connection()
         self._ad.penup()
+        self._pen_is_down = False
 
     def pen_down(self) -> None:
         self._require_connection()
         self._ad.pendown()
+        self._pen_is_down = True
+
+    # ------------------------------------------------------------------
+    # Motion
+    # ------------------------------------------------------------------
 
     def move_to(self, x: float, y: float) -> None:
         """Move to absolute position (inches) with pen up."""
         self._require_connection()
         self._check_bounds(x, y)
         self._ad.moveto(x, y)
+        self._pos_x, self._pos_y = x, y
+
+    def move_to_mm(self, x_mm: float, y_mm: float) -> None:
+        """Move to absolute position in mm with pen up."""
+        self.move_to(x_mm / MM_PER_INCH, y_mm / MM_PER_INCH)
 
     def line_to(self, x: float, y: float) -> None:
         """Draw to absolute position (inches) with pen down."""
         self._require_connection()
         self._check_bounds(x, y)
         self._ad.lineto(x, y)
+        self._pos_x, self._pos_y = x, y
+
+    def jog(self, dx_mm: float, dy_mm: float) -> None:
+        """Move relative to current position by (dx, dy) in mm, pen up."""
+        new_x = self._pos_x + dx_mm / MM_PER_INCH
+        new_y = self._pos_y + dy_mm / MM_PER_INCH
+        self.move_to(new_x, new_y)
+
+    # ------------------------------------------------------------------
+    # Home management
+    # ------------------------------------------------------------------
+
+    def set_home(self) -> tuple[float, float]:
+        """Mark the current position as the user home. Returns (x_mm, y_mm)."""
+        self._home_x = self._pos_x
+        self._home_y = self._pos_y
+        return self.home_mm
 
     def go_home(self) -> None:
-        """Return pen to home (0, 0)."""
+        """Move to the user-defined home position (pen up)."""
+        self._require_connection()
+        self.move_to(self._home_x, self._home_y)
+
+    def go_origin(self) -> None:
+        """Move to machine origin (0, 0) — where the carriage was on connect."""
         self._require_connection()
         self._ad.moveto(0, 0)
+        self._pos_x, self._pos_y = 0.0, 0.0
 
     def draw_path(self, points: list[tuple[float, float]]) -> None:
         """Draw a polyline through a list of (x, y) inch coordinates."""
@@ -237,7 +324,17 @@ class Plotter:
     def enable_motors(self) -> None:
         self._require_connection()
         self._ad.enable_motors()
+        self._motors_enabled = True
 
     def disable_motors(self) -> None:
         self._require_connection()
         self._ad.disable_motors()
+        self._motors_enabled = False
+
+    def toggle_motors(self) -> bool:
+        """Toggle motors on/off. Returns True if motors are now enabled."""
+        if self._motors_enabled:
+            self.disable_motors()
+        else:
+            self.enable_motors()
+        return self._motors_enabled
