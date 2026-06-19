@@ -4,3 +4,4 @@ customtkinter>=5.2.0
 Pillow>=10.0.0
 vtracer>=0.6.0
 hatchsvg>=1.0.0
+hershey-fonts>=0.1.0

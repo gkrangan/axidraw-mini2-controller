@@ -118,6 +118,9 @@ def build_parser() -> argparse.ArgumentParser:
     tp = shape_sub.add_parser("text", help="Draw text")
     tp.add_argument("text"); tp.add_argument("x", type=float); tp.add_argument("y", type=float)
     tp.add_argument("--size", type=float, default=24, help="Font size in pt")
+    tp.add_argument("--font", default="futural",
+                    choices=["futural","futuram","cursive","gothgbt","gothgrt","scripts","cyrillic"],
+                    help="Hershey stroke font (default: futural)")
 
     return p
 
@@ -265,7 +268,7 @@ def _cmd_draw_shape(args, plotter: Plotter):
     elif shape == "polygon":
         svg = shapes.polygon_svg(args.cx, args.cy, args.r, args.sides)
     elif shape == "text":
-        svg = shapes.text_svg(args.text, args.x, args.y, args.size)
+        svg = shapes.text_svg(args.text, args.x, args.y, args.size, args.font)
     else:
         print(f"Unknown shape: {shape}", file=sys.stderr)
         sys.exit(1)

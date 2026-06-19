@@ -199,6 +199,14 @@ class App(ctk.CTk):
         self._txt = self._field_row(parent, row, ["X (in)", "Y (in)", "Size (pt)"],
                                     ["0.5", "1.0", "24"], start_col=2)
         row += 1
+        _HERSHEY_FONTS = ["futural", "futuram", "cursive", "gothgbt", "gothgrt", "scripts", "cyrillic"]
+        ctk.CTkLabel(parent, text="Font", font=("", 10)).grid(
+            row=row, column=0, padx=(8, 2), sticky="w"
+        )
+        self._txt_font = ctk.CTkOptionMenu(parent, values=_HERSHEY_FONTS, width=120)
+        self._txt_font.set("futural")
+        self._txt_font.grid(row=row, column=1, padx=4, pady=4, sticky="w")
+        row += 1
         ctk.CTkButton(parent, text="Plot Text", command=self._plot_text).grid(
             row=row, column=0, columnspan=4, padx=8, pady=4, sticky="ew"
         )
@@ -801,7 +809,8 @@ class App(ctk.CTk):
             x = float(self._txt["X (in)"].get())
             y = float(self._txt["Y (in)"].get())
             size = float(self._txt["Size (pt)"].get())
-            svg = shapes.text_svg(text, x, y, size)
+            font = self._txt_font.get()
+            svg = shapes.text_svg(text, x, y, size, font)
             self._plot_shape_svg(svg, "Text")
         except ValueError:
             mb.showerror("Input Error", "Enter valid numbers for text position/size.")

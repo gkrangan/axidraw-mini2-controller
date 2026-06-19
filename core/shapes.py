@@ -79,21 +79,65 @@ def text_svg(
     text: str,
     x: float, y: float,
     font_size_pt: float = 12,
+    font_name: str = "futural",
     *,
     canvas_w: float = 6.0, canvas_h: float = 4.0,
 ) -> str:
     """
-    Render text as SVG <text> element.
-    Note: AxiDraw will render this as a font glyph outline only if Hershey
-    text is used. For best results, convert to paths with Inkscape first.
+    Render text as plotter-ready SVG <path> elements using Hershey stroke fonts.
+
+    Hershey fonts are single-stroke vector fonts designed for pen plotters —
+    every character is a set of line segments with no fill, so pyaxidraw can
+    plot them directly without any conversion step.
+
+    Parameters
+    ----------
+    text        : string to render
+    x, y        : position in inches (bottom-left of text baseline)
+    font_size_pt: point size (default 12)
+    font_name   : Hershey font name — common options:
+                    'futural'  (sans-serif, default)
+                    'futuram'  (sans-serif bold)
+                    'cursive'  (italic cursive)
+                    'gothgbt'  (gothic)
+                    'scripts'  (script)
+    canvas_w/h  : SVG canvas dimensions in inches
     """
-    px, py = x * 96, y * 96
-    fs = font_size_pt * 1.333   # pt → px
-    body = (
-        f'  <text x="{px}" y="{py}" font-size="{fs:.1f}" '
-        f'font-family="sans-serif" stroke="black" stroke-width="0.5" fill="none">'
-        f'{text}</text>'
-    )
+    try:
+        from HersheyFonts import HersheyFonts
+    except ImportError:
+        raise RuntimeError(
+            "hershey-fonts is not installed. Run: pip install hershey-fonts"
+        )
+
+    hf = HersheyFonts()
+    try:
+        hf.load_default_font(font_name)
+    except Exception:
+        hf.load_default_font("futural")
+
+    # Scale factor: Hershey glyphs span roughly 21 units cap-height.
+    # Convert pt → inches (1pt = 1/72 in), then to 96-dpi SVG pixels.
+    scale = (font_size_pt / 72.0) * 96 / 21.0
+
+    ox = x * 96   # origin in SVG pixels
+    oy = y * 96
+
+    paths = []
+    for stroke in hf.strokes_for_text(text):
+        if len(stroke) < 2:
+            continue
+        pts = [(ox + sx * scale, oy + sy * scale) for sx, sy in stroke]
+        d = "M " + " L ".join(f"{px:.2f},{py:.2f}" for px, py in pts)
+        paths.append(
+            f'  <path d="{d}" stroke="black" stroke-width="0.8" '
+            f'fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+        )
+
+    if not paths:
+        raise ValueError(f"No strokes generated for text: {text!r}")
+
+    body = "\n".join(paths)
     return _svg_wrap(body, canvas_w, canvas_h)
 
 
