@@ -1,4 +1,13 @@
-"""Raster image (JPEG/PNG/BMP) → SVG conversion via vtracer or potrace."""
+"""Raster image → SVG conversion.
+
+Three backends are supported:
+  - hatchsvg  : hatched plotter-optimised SVG (pen-lift minimised serpentine paths)
+  - vtracer   : outline/colour tracing via the vtracer library
+  - potrace   : greyscale outline tracing via the potrace CLI
+
+hatch_to_svg()  — dedicated hatchsvg entry-point (colour layers, hatch lines)
+trace_to_svg()  — outline tracing; tries vtracer → potrace fallback chain
+"""
 
 from __future__ import annotations
 
@@ -9,20 +18,103 @@ from pathlib import Path
 
 from PIL import Image
 
-SUPPORTED_RASTER = {".jpg", ".jpeg", ".png", ".bmp"}
+# hatchsvg supports a broader set of raster formats than vtracer/potrace
+SUPPORTED_RASTER = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif", ".tiff", ".tif"}
+# subset accepted by the outline tracers (vtracer / potrace)
+_OUTLINE_RASTER = {".jpg", ".jpeg", ".png", ".bmp"}
 
 
 def is_raster(path: str) -> bool:
     return Path(path).suffix.lower() in SUPPORTED_RASTER
 
 
+# ------------------------------------------------------------------
+# hatchsvg backend
+# ------------------------------------------------------------------
+
+def hatch_to_svg(
+    image_path: str,
+    output_path: str | None = None,
+    *,
+    max_palette: int = 12,
+    line_step: int = 4,
+    stroke_width: float = 0.5,
+    outline_width: float = 0.8,
+    hatch_angle: float = 45.0,
+    scale: float = 1.0,
+    continuous_paths: bool = True,
+    arc_radius: float = 2.0,
+    skip_bg: bool = False,
+    separate_outline: bool = False,
+    optimize_travel: bool = True,
+) -> str:
+    """
+    Convert a raster image to a hatched plotter-optimised SVG using hatchsvg.
+
+    Returns the path to the generated SVG file.
+
+    Parameters
+    ----------
+    image_path       : source raster (PNG/JPG/BMP/WebP/GIF/TIFF)
+    output_path      : destination SVG; defaults to <source>.svg
+    max_palette      : max number of colour layers (default 12)
+    line_step        : spacing between hatch lines in pixels (default 4)
+    stroke_width     : SVG stroke width for hatch lines (default 0.5)
+    outline_width    : SVG stroke width for outlines (default 0.8)
+    hatch_angle      : angle of hatch lines in degrees (default 45.0)
+    scale            : image scale factor before processing (default 1.0)
+    continuous_paths : serpentine paths to minimise pen lifts (default True)
+    arc_radius       : arc smoothing radius at U-turns (default 2.0)
+    skip_bg          : skip the background/dominant colour layer (default False)
+    separate_outline : write outline as a separate path element (default False)
+    optimize_travel  : reorder layers to minimise pen-up travel (default True)
+    """
+    try:
+        from hatchsvg.core import process_image_to_hatched_svg, RenderParams  # type: ignore
+    except ImportError:
+        raise RuntimeError("hatchsvg is not installed. Run: pip install hatchsvg")
+
+    src = Path(image_path).resolve()
+    if not src.exists():
+        raise FileNotFoundError(f"Image not found: {image_path}")
+    if src.suffix.lower() not in SUPPORTED_RASTER:
+        raise ValueError(f"Unsupported format: {src.suffix}. Supported: {SUPPORTED_RASTER}")
+
+    dst = Path(output_path) if output_path else src.with_suffix(".svg")
+
+    params = RenderParams(
+        max_palette=max_palette,
+        line_step=line_step,
+        stroke_width=stroke_width,
+        outline_width=outline_width,
+        hatch_angle=hatch_angle,
+        scale=scale,
+        continuous_paths=continuous_paths,
+        arc_radius=arc_radius,
+        skip_bg=skip_bg,
+        separate_outline=separate_outline,
+    )
+
+    process_image_to_hatched_svg(
+        input_path=src,
+        output_path=dst,
+        params=params,
+        optimize_travel=optimize_travel,
+    )
+
+    return str(dst)
+
+
+# ------------------------------------------------------------------
+# Outline tracing (vtracer → potrace fallback)
+# ------------------------------------------------------------------
+
 def trace_to_svg(
     image_path: str,
     output_path: str | None = None,
     *,
-    # vtracer options
-    colormode: str = "binary",   # "binary" | "color" | "layered"
-    filter_speckle: int = 4,     # remove noise specks smaller than N px
+    colormode: str = "binary",
+    filter_speckle: int = 4,
     color_precision: int = 6,
     layer_difference: int = 16,
     corner_threshold: int = 60,
@@ -32,24 +124,26 @@ def trace_to_svg(
     path_precision: int = 3,
 ) -> str:
     """
-    Convert a raster image to SVG.
+    Convert a raster image to an outline SVG.
+
+    Tries vtracer first; falls back to potrace.
 
     Returns the path to the generated SVG file.
-    Tries vtracer first; falls back to potrace (requires separate install).
     """
     src = Path(image_path).resolve()
     if not src.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
-    if src.suffix.lower() not in SUPPORTED_RASTER:
-        raise ValueError(f"Unsupported format: {src.suffix}. Use {SUPPORTED_RASTER}")
+    if src.suffix.lower() not in _OUTLINE_RASTER:
+        raise ValueError(
+            f"Unsupported format for outline tracing: {src.suffix}. "
+            f"Use {_OUTLINE_RASTER}, or use hatch_to_svg() for WebP/GIF/TIFF."
+        )
 
-    if output_path is None:
-        output_path = str(src.with_suffix(".svg"))
+    dst = str(Path(output_path) if output_path else src.with_suffix(".svg"))
 
     try:
         return _trace_vtracer(
-            str(src),
-            output_path,
+            str(src), dst,
             colormode=colormode,
             filter_speckle=filter_speckle,
             color_precision=color_precision,
@@ -64,10 +158,10 @@ def trace_to_svg(
         pass
 
     try:
-        return _trace_potrace(str(src), output_path)
+        return _trace_potrace(str(src), dst)
     except _TracerNotFound:
         raise RuntimeError(
-            "No tracer found. Install one:\n"
+            "No outline tracer found. Install one:\n"
             "  pip install vtracer\n"
             "  OR: brew install potrace"
         )
@@ -84,12 +178,7 @@ def _trace_vtracer(src: str, dst: str, **kwargs) -> str:
         raise _TracerNotFound("vtracer")
 
     colormode = kwargs.pop("colormode", "binary")
-    vtracer.convert_image_to_svg_py(
-        src,
-        dst,
-        colormode=colormode,
-        **kwargs,
-    )
+    vtracer.convert_image_to_svg_py(src, dst, colormode=colormode, **kwargs)
     return dst
 
 
@@ -102,14 +191,11 @@ def _trace_potrace(src: str, dst: str) -> str:
     if not potrace:
         raise _TracerNotFound("potrace")
 
-    # potrace needs BMP input
     with tempfile.NamedTemporaryFile(suffix=".bmp", delete=False) as tmp:
         bmp_path = tmp.name
 
     try:
-        img = Image.open(src).convert("L")  # greyscale
-        img.save(bmp_path, format="BMP")
-
+        Image.open(src).convert("L").save(bmp_path, format="BMP")
         subprocess.run(
             [potrace, "--svg", "-o", dst, bmp_path],
             check=True,

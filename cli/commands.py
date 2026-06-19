@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from core.plotter import Plotter, PlotterConfig, PlotterError
-from core.image_trace import is_raster, trace_to_svg
+from core.image_trace import is_raster, trace_to_svg, hatch_to_svg
 from core.config_io import load_config
 from core import shapes
 
@@ -45,10 +45,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     # trace
     sp = sub.add_parser("trace", help="Convert raster image to SVG (no plotting)")
-    sp.add_argument("file", help="Path to JPEG/PNG/BMP")
+    sp.add_argument("file", help="Path to image (JPG/PNG/BMP/WebP/GIF/TIFF)")
     sp.add_argument("-o", "--output", help="Output SVG path (default: same dir as input)")
+    sp.add_argument("--backend", choices=["hatchsvg", "outline"], default="hatchsvg",
+                    help="Tracing backend: hatchsvg (hatched, default) or outline (vtracer/potrace)")
+    # hatchsvg options
+    sp.add_argument("--hatch-angle", type=float, default=45.0,
+                    help="Hatch line angle in degrees (default: 45)")
+    sp.add_argument("--line-step", type=int, default=4,
+                    help="Spacing between hatch lines in px (default: 4)")
+    sp.add_argument("--max-palette", type=int, default=12,
+                    help="Max colour layers for hatchsvg (default: 12)")
+    sp.add_argument("--stroke-width", type=float, default=0.5,
+                    help="SVG stroke width (default: 0.5)")
+    sp.add_argument("--scale", type=float, default=1.0,
+                    help="Image scale factor (default: 1.0)")
+    sp.add_argument("--arc-radius", type=float, default=2.0,
+                    help="Arc smoothing radius at U-turns (default: 2.0)")
+    sp.add_argument("--no-continuous", action="store_true",
+                    help="Disable serpentine continuous paths")
+    sp.add_argument("--skip-bg", action="store_true",
+                    help="Skip background colour layer")
+    sp.add_argument("--no-optimize", action="store_true",
+                    help="Disable layer travel order optimisation")
+    # outline options
     sp.add_argument("--colormode", choices=["binary", "color", "layered"],
-                    default="binary", help="Trace color mode")
+                    default="binary", help="Outline trace color mode (outline backend only)")
 
     # home
     sub.add_parser("home", help="Move pen to home position (0, 0)")
@@ -168,8 +190,8 @@ def _dispatch(args, plotter: Plotter):
 def _cmd_plot(args, plotter: Plotter):
     path = args.file
     if is_raster(path):
-        print(f"Raster detected — tracing {path}…")
-        path = trace_to_svg(path)
+        print(f"Raster detected — tracing with hatchsvg: {path}…")
+        path = hatch_to_svg(path)
         print(f"SVG saved to: {path}")
     print(f"Plotting {path}…")
     plotter.plot_svg(path)
@@ -178,7 +200,22 @@ def _cmd_plot(args, plotter: Plotter):
 
 def _cmd_trace(args):
     src = args.file
-    out = trace_to_svg(src, args.output, colormode=args.colormode)
+    if args.backend == "hatchsvg":
+        out = hatch_to_svg(
+            src,
+            args.output,
+            hatch_angle=args.hatch_angle,
+            line_step=args.line_step,
+            max_palette=args.max_palette,
+            stroke_width=args.stroke_width,
+            scale=args.scale,
+            arc_radius=args.arc_radius,
+            continuous_paths=not args.no_continuous,
+            skip_bg=args.skip_bg,
+            optimize_travel=not args.no_optimize,
+        )
+    else:
+        out = trace_to_svg(src, args.output, colormode=args.colormode)
     print(f"SVG written to: {out}")
 
 

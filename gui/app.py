@@ -13,14 +13,14 @@ from typing import Optional
 import customtkinter as ctk
 
 from core.plotter import Plotter, PlotterConfig, PlotterError, PEN_ANGLE_PRESETS
-from core.image_trace import is_raster, trace_to_svg, SUPPORTED_RASTER
+from core.image_trace import is_raster, trace_to_svg, hatch_to_svg, SUPPORTED_RASTER
 from core.config_io import load_config, save_config, config_path
 from core import shapes
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-_RASTER_TYPES = [("Image files", " ".join(f"*{e}" for e in SUPPORTED_RASTER))]
+_RASTER_TYPES = [("Image files", " ".join(f"*{e}" for e in sorted(SUPPORTED_RASTER)))]
 _SVG_TYPES = [("SVG files", "*.svg")]
 _ALL_TYPES = [
     ("Supported files", "*.svg *.jpg *.jpeg *.png *.bmp"),
@@ -219,36 +219,111 @@ class App(ctk.CTk):
     # ------------------------------------------------------------------
 
     def _build_trace_tab(self, parent):
-        parent.grid_columnconfigure(0, weight=1)
+        parent.grid_columnconfigure(1, weight=1)
+        row = 0
 
         ctk.CTkLabel(parent, text="Raster → SVG Trace", font=("", 14, "bold")).grid(
-            row=0, column=0, columnspan=2, pady=(8, 12), sticky="w", padx=8
+            row=row, column=0, columnspan=2, pady=(8, 8), sticky="w", padx=8
         )
+        row += 1
 
-        ctk.CTkButton(parent, text="Open Image (JPG/PNG/BMP)…", command=self._open_raster).grid(
-            row=1, column=0, columnspan=2, padx=8, pady=4, sticky="ew"
+        ctk.CTkButton(
+            parent,
+            text="Open Image (JPG/PNG/BMP/WebP/GIF/TIFF)…",
+            command=self._open_raster,
+        ).grid(row=row, column=0, columnspan=2, padx=8, pady=4, sticky="ew")
+        row += 1
+
+        self._lbl_trace_src = ctk.CTkLabel(parent, text="No image selected",
+                                            font=("", 10), text_color="gray")
+        self._lbl_trace_src.grid(row=row, column=0, columnspan=2, padx=8,
+                                  pady=(0, 10), sticky="w")
+        row += 1
+
+        # ---- Backend selector ----
+        ctk.CTkLabel(parent, text="Tracing backend", font=("", 12, "bold")).grid(
+            row=row, column=0, padx=8, pady=(4, 2), sticky="w"
         )
-        self._lbl_trace_src = ctk.CTkLabel(parent, text="No image selected", font=("", 10),
-                                            text_color="gray")
-        self._lbl_trace_src.grid(row=2, column=0, columnspan=2, padx=8, pady=(0, 8), sticky="w")
+        self._trace_backend = ctk.CTkOptionMenu(
+            parent,
+            values=["hatchsvg (hatched)", "vtracer / potrace (outline)"],
+            command=self._on_trace_backend_changed,
+        )
+        self._trace_backend.grid(row=row, column=1, padx=8, pady=(4, 2), sticky="ew")
+        row += 1
 
-        ctk.CTkLabel(parent, text="Color mode").grid(row=3, column=0, padx=8, sticky="w")
-        self._colormode = ctk.CTkOptionMenu(parent, values=["binary", "color", "layered"])
-        self._colormode.grid(row=3, column=1, padx=8, pady=4, sticky="ew")
+        # ---- hatchsvg options (shown by default) ----
+        self._hatch_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._hatch_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=4)
+        self._hatch_frame.grid_columnconfigure(1, weight=1)
+        self._build_hatch_options(self._hatch_frame)
+        row += 1
 
-        ctk.CTkLabel(parent, text="Filter speckle (px)").grid(row=4, column=0, padx=8, sticky="w")
-        self._speckle = ctk.CTkEntry(parent, width=80)
-        self._speckle.insert(0, "4")
-        self._speckle.grid(row=4, column=1, padx=8, pady=4, sticky="w")
+        # ---- outline tracer options (hidden by default) ----
+        self._outline_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._outline_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=4)
+        self._outline_frame.grid_columnconfigure(1, weight=1)
+        self._build_outline_options(self._outline_frame)
+        self._outline_frame.grid_remove()   # hidden until backend switches
+        row += 1
 
+        # ---- action buttons ----
         btn_row = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_row.grid(row=5, column=0, columnspan=2, padx=8, pady=8, sticky="ew")
-        ctk.CTkButton(btn_row, text="Trace to SVG", command=self._run_trace).pack(side="left", padx=(0, 8))
+        btn_row.grid(row=row, column=0, columnspan=2, padx=8, pady=10, sticky="ew")
+        ctk.CTkButton(btn_row, text="Trace to SVG",
+                      command=self._run_trace).pack(side="left", padx=(0, 8))
         ctk.CTkButton(btn_row, text="Trace & Plot", fg_color="green",
                       command=self._trace_and_plot).pack(side="left")
+        row += 1
 
         self._lbl_trace_out = ctk.CTkLabel(parent, text="", font=("", 10), text_color="gray")
-        self._lbl_trace_out.grid(row=6, column=0, columnspan=2, padx=8, sticky="w")
+        self._lbl_trace_out.grid(row=row, column=0, columnspan=2, padx=8, sticky="w")
+
+    def _build_hatch_options(self, parent):
+        fields = [
+            ("Hatch angle (°)",      "_hatch_angle",    "45.0"),
+            ("Line step (px)",       "_hatch_line_step", "4"),
+            ("Max palette colours",  "_hatch_palette",  "12"),
+            ("Stroke width",         "_hatch_stroke",   "0.5"),
+            ("Scale",                "_hatch_scale",    "1.0"),
+            ("Arc radius (U-turns)", "_hatch_arc",      "2.0"),
+        ]
+        for i, (label, attr, default) in enumerate(fields):
+            ctk.CTkLabel(parent, text=label).grid(row=i, column=0, padx=8, pady=4, sticky="w")
+            e = ctk.CTkEntry(parent)
+            e.insert(0, default)
+            e.grid(row=i, column=1, padx=8, pady=4, sticky="ew")
+            setattr(self, attr, e)
+
+        r = len(fields)
+        self._hatch_continuous = ctk.CTkCheckBox(parent, text="Continuous paths (fewer pen lifts)")
+        self._hatch_continuous.select()
+        self._hatch_continuous.grid(row=r, column=0, columnspan=2, padx=8, pady=4, sticky="w")
+
+        self._hatch_skip_bg = ctk.CTkCheckBox(parent, text="Skip background colour")
+        self._hatch_skip_bg.grid(row=r + 1, column=0, columnspan=2, padx=8, pady=4, sticky="w")
+
+        self._hatch_optimize = ctk.CTkCheckBox(parent, text="Optimise layer travel order")
+        self._hatch_optimize.select()
+        self._hatch_optimize.grid(row=r + 2, column=0, columnspan=2, padx=8, pady=4, sticky="w")
+
+    def _build_outline_options(self, parent):
+        ctk.CTkLabel(parent, text="Color mode").grid(row=0, column=0, padx=8, pady=4, sticky="w")
+        self._colormode = ctk.CTkOptionMenu(parent, values=["binary", "color", "layered"])
+        self._colormode.grid(row=0, column=1, padx=8, pady=4, sticky="ew")
+
+        ctk.CTkLabel(parent, text="Filter speckle (px)").grid(row=1, column=0, padx=8, pady=4, sticky="w")
+        self._speckle = ctk.CTkEntry(parent, width=80)
+        self._speckle.insert(0, "4")
+        self._speckle.grid(row=1, column=1, padx=8, pady=4, sticky="w")
+
+    def _on_trace_backend_changed(self, choice: str):
+        if "hatchsvg" in choice:
+            self._hatch_frame.grid()
+            self._outline_frame.grid_remove()
+        else:
+            self._hatch_frame.grid_remove()
+            self._outline_frame.grid()
 
     # ------------------------------------------------------------------
     # Settings tab
@@ -527,11 +602,25 @@ class App(ctk.CTk):
 
     def _do_trace(self, src: str) -> str | None:
         try:
-            out = trace_to_svg(
-                src,
-                colormode=self._colormode.get(),
-                filter_speckle=int(self._speckle.get()),
-            )
+            if "hatchsvg" in self._trace_backend.get():
+                out = hatch_to_svg(
+                    src,
+                    hatch_angle=float(self._hatch_angle.get()),
+                    line_step=int(self._hatch_line_step.get()),
+                    max_palette=int(self._hatch_palette.get()),
+                    stroke_width=float(self._hatch_stroke.get()),
+                    scale=float(self._hatch_scale.get()),
+                    arc_radius=float(self._hatch_arc.get()),
+                    continuous_paths=bool(self._hatch_continuous.get()),
+                    skip_bg=bool(self._hatch_skip_bg.get()),
+                    optimize_travel=bool(self._hatch_optimize.get()),
+                )
+            else:
+                out = trace_to_svg(
+                    src,
+                    colormode=self._colormode.get(),
+                    filter_speckle=int(self._speckle.get()),
+                )
             self._log(f"Traced SVG saved: {out}")
             self._lbl_trace_out.configure(text=f"SVG: {Path(out).name}")
             return out
