@@ -177,11 +177,31 @@ class App(ctk.CTk):
     }
 
     def _build_shapes_tab(self, parent):
-        # Wrap in a scrollable frame so all shapes fit
-        scroll = ctk.CTkScrollableFrame(parent)
-        scroll.pack(fill="both", expand=True)
-        scroll.grid_columnconfigure((0, 1, 2, 3), weight=1)
-        p = scroll  # shorthand
+        # Scrollable container — built with native tk.Canvas so it works on Tk 9.0
+        # (CTkScrollableFrame uses Canvas internally and segfaults on Tk 9.0 / macOS)
+        canvas = tk.Canvas(parent, highlightthickness=0,
+                           bg=ctk.ThemeManager.theme["CTkFrame"]["fg_color"][1])
+        vsb = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        p = ctk.CTkFrame(canvas, fg_color="transparent")
+        win_id = canvas.create_window((0, 0), window=p, anchor="nw")
+
+        def _on_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        def _on_canvas_resize(event):
+            canvas.itemconfig(win_id, width=event.width)
+        p.bind("<Configure>", _on_configure)
+        canvas.bind("<Configure>", _on_canvas_resize)
+
+        # Mouse-wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        p.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         row = 0
         ctk.CTkLabel(p, text="Generate & Plot Shapes", font=("", 14, "bold")).grid(
