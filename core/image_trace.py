@@ -268,6 +268,7 @@ def trace_to_svg(
 
     dst = str(Path(output_path) if output_path else src.with_suffix(".svg"))
 
+    vtracer_error: str | None = None
     try:
         return _trace_vtracer(
             str(src), dst,
@@ -281,31 +282,59 @@ def trace_to_svg(
             splice_threshold=splice_threshold,
             path_precision=path_precision,
         )
-    except _TracerNotFound:
-        pass
+    except _TracerNotFound as e:
+        vtracer_error = str(e)
 
+    # vtracer unavailable or crashed — fall back to potrace
     try:
         return _trace_potrace(str(src), dst)
     except _TracerNotFound:
+        detail = f" (vtracer error: {vtracer_error})" if vtracer_error and "not installed" not in vtracer_error else ""
         raise RuntimeError(
-            "No outline tracer found. Install one:\n"
+            f"No working outline tracer found{detail}.\n"
+            "Install one:\n"
             "  pip install vtracer\n"
             "  OR: brew install potrace"
         )
 
 
 # ------------------------------------------------------------------
-# vtracer backend
+# vtracer backend — run in a subprocess to isolate Rust segfaults
 # ------------------------------------------------------------------
 
 def _trace_vtracer(src: str, dst: str, **kwargs) -> str:
+    """
+    Run vtracer in an isolated subprocess. If vtracer is not installed, or if
+    the subprocess crashes (segfault, non-zero exit), raise _TracerNotFound so
+    the caller falls back to potrace.
+    """
+    import sys
+    colormode = kwargs.pop("colormode", "binary")
+
+    # Quick import check in the current process — avoids spawning if not installed
     try:
-        import vtracer  # type: ignore
+        import vtracer as _vt  # noqa: F401
     except ImportError:
         raise _TracerNotFound("vtracer")
 
-    colormode = kwargs.pop("colormode", "binary")
-    vtracer.convert_image_to_svg_py(src, dst, colormode=colormode, **kwargs)
+    # Build a small inline script so vtracer runs in its own process.
+    # A Rust segfault there won't kill the GUI.
+    script = (
+        "import sys, vtracer\n"
+        "vtracer.convert_image_to_svg_py("
+        f"  {src!r}, {dst!r}, colormode={colormode!r}"
+        ")\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise _TracerNotFound(
+            f"vtracer subprocess failed (exit {result.returncode}): {stderr or 'unknown error'}"
+        )
     return dst
 
 
