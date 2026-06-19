@@ -70,7 +70,7 @@ class App(ctk.CTk):
         self._lbl_status = ctk.CTkLabel(sidebar, text="● Disconnected", text_color="red")
         self._lbl_status.grid(row=3, column=0, padx=16, pady=(0, 12), sticky="w")
 
-        ctk.CTkSeparator(sidebar, orientation="horizontal").grid(
+        ctk.CTkFrame(sidebar, height=1, fg_color="#444").grid(
             row=4, column=0, padx=12, pady=4, sticky="ew"
         )
 
@@ -94,7 +94,7 @@ class App(ctk.CTk):
             row=9, column=0, padx=16, pady=4, sticky="ew"
         )
 
-        ctk.CTkSeparator(sidebar, orientation="horizontal").grid(
+        ctk.CTkFrame(sidebar, height=1, fg_color="#444").grid(
             row=10, column=0, padx=12, pady=4, sticky="ew"
         )
 
