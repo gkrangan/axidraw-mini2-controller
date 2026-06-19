@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from core.plotter import Plotter, PlotterConfig, PlotterError
-from core.image_trace import is_raster, trace_to_svg, hatch_to_svg
+from core.image_trace import is_raster, trace_to_svg, hatch_to_svg, fit_svg_to_bounds
 from core.config_io import load_config
 from core import shapes
 
@@ -47,8 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("trace", help="Convert raster image to SVG (no plotting)")
     sp.add_argument("file", help="Path to image (JPG/PNG/BMP/WebP/GIF/TIFF)")
     sp.add_argument("-o", "--output", help="Output SVG path (default: same dir as input)")
-    sp.add_argument("--backend", choices=["hatchsvg", "outline"], default="hatchsvg",
-                    help="Tracing backend: hatchsvg (hatched, default) or outline (vtracer/potrace)")
+    sp.add_argument("--backend", choices=["hatchsvg", "outline"], default="outline",
+                    help="Tracing backend: outline (vtracer/potrace, default) or hatchsvg (hatched)")
+    sp.add_argument("--scale-pct", type=float, default=90.0, metavar="PCT",
+                    help="Scale traced SVG to fill PCT%% of the plotter travel area, centred (1–100, default 90)")
     # hatchsvg options
     sp.add_argument("--hatch-angle", type=float, default=45.0,
                     help="Hatch line angle in degrees (default: 45)")
@@ -264,6 +266,11 @@ def _cmd_plot(args, plotter: Plotter):
 
 
 def _cmd_trace(args):
+    scale_pct = args.scale_pct
+    if not (1 <= scale_pct <= 100):
+        print(f"Error: --scale-pct must be between 1 and 100 (got {scale_pct})", file=sys.stderr)
+        sys.exit(1)
+
     src = args.file
     if args.backend == "hatchsvg":
         out = hatch_to_svg(
@@ -281,7 +288,10 @@ def _cmd_trace(args):
         )
     else:
         out = trace_to_svg(src, args.output, colormode=args.colormode)
-    print(f"SVG written to: {out}")
+
+    cfg = load_config()
+    fit_svg_to_bounds(out, x_max_mm=cfg.x_max_mm, y_max_mm=cfg.y_max_mm, scale_pct=scale_pct)
+    print(f"SVG written and fitted to {scale_pct:.0f}% of travel area: {out}")
 
 
 def _cmd_draw_shape(args, plotter: Plotter):

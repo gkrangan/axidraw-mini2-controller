@@ -12,11 +12,138 @@ trace_to_svg()  — outline tracing; tries vtracer → potrace fallback chain
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
 
 from PIL import Image
+
+# Hard physical limits — kept here so image_trace stays self-contained
+_X_HARD_MAX_MM: float = 150.0
+_Y_HARD_MAX_MM: float = 100.0
+_MM_PER_IN: float = 25.4
+_PX_PER_IN: float = 96.0   # SVG default DPI
+
+
+# ------------------------------------------------------------------
+# SVG bounds fitting
+# ------------------------------------------------------------------
+
+def fit_svg_to_bounds(
+    svg_path: str,
+    x_max_mm: float = 140.0,
+    y_max_mm: float = 90.0,
+    scale_pct: float = 90.0,
+) -> str:
+    """
+    Read an SVG file, scale its content to fill `scale_pct` percent of the
+    plotter's travel area, centre it, and write the result back in place.
+
+    Returns the same svg_path (modified in place).
+
+    Args:
+        svg_path   : path to the SVG file to modify
+        x_max_mm   : plotter X travel limit in mm (from config)
+        y_max_mm   : plotter Y travel limit in mm (from config)
+        scale_pct  : how much of the travel area to fill (1–100, default 90)
+
+    Raises:
+        ValueError : if scale_pct is out of range or SVG has no readable viewBox
+    """
+    if not (1 <= scale_pct <= 100):
+        raise ValueError(f"scale_pct must be 1–100 (got {scale_pct})")
+
+    # Clamp limits to hard caps
+    x_limit_mm = min(x_max_mm, _X_HARD_MAX_MM)
+    y_limit_mm = min(y_max_mm, _Y_HARD_MAX_MM)
+
+    frac = scale_pct / 100.0
+    target_w_mm = x_limit_mm * frac
+    target_h_mm = y_limit_mm * frac
+
+    svg_text = Path(svg_path).read_text(encoding="utf-8")
+
+    # Extract viewBox — preferred over width/height as it covers all tracers
+    vb_match = re.search(r'viewBox=["\']([^"\']+)["\']', svg_text)
+    if not vb_match:
+        # Fall back to width/height attributes (inches or px)
+        w_match = re.search(r'\bwidth=["\']([^"\']+)["\']', svg_text)
+        h_match = re.search(r'\bheight=["\']([^"\']+)["\']', svg_text)
+        if not w_match or not h_match:
+            raise ValueError("SVG has no viewBox, width, or height — cannot fit to bounds.")
+        src_w_px = _parse_svg_length(w_match.group(1))
+        src_h_px = _parse_svg_length(h_match.group(1))
+        vb_x, vb_y = 0.0, 0.0
+    else:
+        parts = vb_match.group(1).split()
+        vb_x, vb_y, src_w_px, src_h_px = (float(p) for p in parts)
+
+    if src_w_px <= 0 or src_h_px <= 0:
+        raise ValueError(f"SVG has zero or negative dimensions ({src_w_px} × {src_h_px}).")
+
+    # Convert source pixel dimensions to mm (96 dpi)
+    src_w_mm = src_w_px / _PX_PER_IN * _MM_PER_IN
+    src_h_mm = src_h_px / _PX_PER_IN * _MM_PER_IN
+
+    # Uniform scale to fit target box while preserving aspect ratio
+    scale = min(target_w_mm / src_w_mm, target_h_mm / src_h_mm)
+
+    out_w_mm = src_w_mm * scale
+    out_h_mm = src_h_mm * scale
+
+    # Centre inside the travel area
+    offset_x_mm = (x_limit_mm - out_w_mm) / 2.0
+    offset_y_mm = (y_limit_mm - out_h_mm) / 2.0
+
+    # Convert offsets to SVG px
+    offset_x_px = offset_x_mm / _MM_PER_IN * _PX_PER_IN
+    offset_y_px = offset_y_mm / _MM_PER_IN * _PX_PER_IN
+
+    canvas_w_px = x_limit_mm / _MM_PER_IN * _PX_PER_IN
+    canvas_h_px = y_limit_mm / _MM_PER_IN * _PX_PER_IN
+    canvas_w_in = x_limit_mm / _MM_PER_IN
+    canvas_h_in = y_limit_mm / _MM_PER_IN
+
+    # Wrap all existing content in a transform group: translate then scale
+    # The translate moves the (possibly non-zero) viewBox origin to our offset.
+    tx = offset_x_px - vb_x * scale
+    ty = offset_y_px - vb_y * scale
+    transform = f"translate({tx:.4f},{ty:.4f}) scale({scale:.6f})"
+
+    # Strip the existing <svg ...> opening tag and reconstruct it
+    svg_text = re.sub(
+        r'<svg[^>]*>',
+        (
+            f'<svg xmlns="http://www.w3.org/2000/svg" '
+            f'width="{canvas_w_in:.4f}in" height="{canvas_h_in:.4f}in" '
+            f'viewBox="0 0 {canvas_w_px:.2f} {canvas_h_px:.2f}">'
+            f'\n<g transform="{transform}">'
+        ),
+        svg_text,
+        count=1,
+        flags=re.DOTALL,
+    )
+    # Close the wrapping group before </svg>
+    svg_text = re.sub(r'</svg>', '</g>\n</svg>', svg_text, count=1)
+
+    Path(svg_path).write_text(svg_text, encoding="utf-8")
+    return svg_path
+
+
+def _parse_svg_length(s: str) -> float:
+    """Convert an SVG length string (e.g. '210mm', '595.28', '8.5in') to px."""
+    s = s.strip()
+    if s.endswith("mm"):
+        return float(s[:-2]) / _MM_PER_IN * _PX_PER_IN
+    if s.endswith("in"):
+        return float(s[:-2]) * _PX_PER_IN
+    if s.endswith("cm"):
+        return float(s[:-2]) / 10.0 / _MM_PER_IN * _PX_PER_IN
+    if s.endswith("pt"):
+        return float(s[:-2]) / 72.0 * _PX_PER_IN
+    # Bare number treated as px
+    return float(re.sub(r'[^\d.]', '', s) or "0")
 
 # hatchsvg supports a broader set of raster formats than vtracer/potrace
 SUPPORTED_RASTER = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif", ".tiff", ".tif"}

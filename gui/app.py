@@ -13,7 +13,7 @@ from typing import Optional
 import customtkinter as ctk
 
 from core.plotter import Plotter, PlotterConfig, PlotterError, PEN_ANGLE_PRESETS
-from core.image_trace import is_raster, trace_to_svg, hatch_to_svg, SUPPORTED_RASTER
+from core.image_trace import is_raster, trace_to_svg, hatch_to_svg, fit_svg_to_bounds, SUPPORTED_RASTER
 from core.config_io import load_config, save_config, config_path
 from core import shapes
 
@@ -344,31 +344,50 @@ class App(ctk.CTk):
                                   pady=(0, 10), sticky="w")
         row += 1
 
+        # ---- Scale to plotter area ----
+        ctk.CTkLabel(parent, text="Scale to plotter area", font=("", 12, "bold")).grid(
+            row=row, column=0, padx=8, pady=(4, 2), sticky="w"
+        )
+        row += 1
+        scale_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        scale_frame.grid(row=row, column=0, columnspan=2, padx=8, pady=(0, 6), sticky="ew")
+        scale_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(scale_frame, text="Fill % of travel area", font=("", 10)).grid(
+            row=0, column=0, padx=(0, 8), sticky="w"
+        )
+        self._trace_scale_pct = ctk.CTkEntry(scale_frame, width=60)
+        self._trace_scale_pct.insert(0, "90")
+        self._trace_scale_pct.grid(row=0, column=1, sticky="w")
+        ctk.CTkLabel(scale_frame, text="% (1–100)  — image centred, aspect ratio preserved",
+                     font=("", 10), text_color="gray").grid(row=0, column=2, padx=8, sticky="w")
+        row += 1
+
         # ---- Backend selector ----
         ctk.CTkLabel(parent, text="Tracing backend", font=("", 12, "bold")).grid(
             row=row, column=0, padx=8, pady=(4, 2), sticky="w"
         )
         self._trace_backend = ctk.CTkOptionMenu(
             parent,
-            values=["hatchsvg (hatched)", "vtracer / potrace (outline)"],
+            values=["vtracer / potrace (outline)", "hatchsvg (hatched)"],
             command=self._on_trace_backend_changed,
         )
+        self._trace_backend.set("vtracer / potrace (outline)")
         self._trace_backend.grid(row=row, column=1, padx=8, pady=(4, 2), sticky="ew")
         row += 1
 
-        # ---- hatchsvg options (shown by default) ----
-        self._hatch_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        self._hatch_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=4)
-        self._hatch_frame.grid_columnconfigure(1, weight=1)
-        self._build_hatch_options(self._hatch_frame)
-        row += 1
-
-        # ---- outline tracer options (hidden by default) ----
+        # ---- outline tracer options (shown by default) ----
         self._outline_frame = ctk.CTkFrame(parent, fg_color="transparent")
         self._outline_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=4)
         self._outline_frame.grid_columnconfigure(1, weight=1)
         self._build_outline_options(self._outline_frame)
-        self._outline_frame.grid_remove()   # hidden until backend switches
+        row += 1
+
+        # ---- hatchsvg options (hidden by default) ----
+        self._hatch_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self._hatch_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=4)
+        self._hatch_frame.grid_columnconfigure(1, weight=1)
+        self._build_hatch_options(self._hatch_frame)
+        self._hatch_frame.grid_remove()   # hidden until backend switches
         row += 1
 
         # ---- action buttons ----
@@ -426,8 +445,8 @@ class App(ctk.CTk):
             self._hatch_frame.grid()
             self._outline_frame.grid_remove()
         else:
-            self._hatch_frame.grid_remove()
             self._outline_frame.grid()
+            self._hatch_frame.grid_remove()
 
     # ------------------------------------------------------------------
     # Manual Control tab
@@ -1001,6 +1020,14 @@ class App(ctk.CTk):
 
     def _do_trace(self, src: str) -> str | None:
         try:
+            scale_pct = float(self._trace_scale_pct.get())
+            if not (1 <= scale_pct <= 100):
+                raise ValueError("Fill % must be between 1 and 100.")
+        except ValueError as e:
+            mb.showerror("Invalid Scale", str(e))
+            return None
+
+        try:
             if "hatchsvg" in self._trace_backend.get():
                 out = hatch_to_svg(
                     src,
@@ -1020,7 +1047,13 @@ class App(ctk.CTk):
                     colormode=self._colormode.get(),
                     filter_speckle=int(self._speckle.get()),
                 )
-            self._log(f"Traced SVG saved: {out}")
+
+            # Scale and centre the SVG to fit within the plotter travel area
+            cfg = self._plotter.config if self._plotter else self._cfg
+            fit_svg_to_bounds(out, x_max_mm=cfg.x_max_mm, y_max_mm=cfg.y_max_mm,
+                              scale_pct=scale_pct)
+
+            self._log(f"Traced SVG saved and fitted to {scale_pct:.0f}% of travel area: {out}")
             self._lbl_trace_out.configure(text=f"SVG: {Path(out).name}")
             return out
         except Exception as e:
