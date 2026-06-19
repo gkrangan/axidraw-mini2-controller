@@ -54,6 +54,7 @@ A Python application for controlling the **CNS AxiDraw Mini 2** drawing robot. P
 - **Image scale-to-fit** — traced images are automatically scaled and centred within the plottable area; scale percentage is configurable
 - **Text rendering via Hershey stroke fonts** — single-stroke fonts designed for pen plotters, converted directly to `<path>` elements (pyaxidraw ignores SVG `<text>` elements)
 - **Manual Control tab** — jog pad, pen up/down, motor enable/disable, set/go-to home, move to XY
+- **Emergency cancel** — Cancel Job button stops any active plot immediately, raises the pen, and returns the carriage to home
 - **Reliable pen control** — `update()` called before every interactive command to prevent the EiBotBoard dropping commands after the first call
 - **Pen angle presets** — 45° angled mount or 90° vertical mount
 - **Configurable axis limits** — X max 150 mm hard cap, Y max 100 mm hard cap; configurable defaults 140 × 90 mm
@@ -239,6 +240,7 @@ Always visible. Provides quick access to connection and core controls.
 | **Motors OFF** | Disable stepper motors — carriage can be moved freely by hand |
 | **Load File…** | Open an SVG, JPG, PNG, or other supported raster file |
 | **▶ Plot** | Plot the currently loaded file |
+| **⬛ Cancel Job** | Emergency stop — halts the active job, raises the pen, returns to home. Enabled only while a job is running. |
 | **Appearance** | Toggle Dark / Light / System theme |
 
 ---
@@ -739,6 +741,15 @@ This is caused by vtracer's Rust native extension crashing on certain image inpu
 **Pen up/down only works the first time after connecting**
 
 This was a known issue with pyaxidraw's interactive session going stale after the first command. Fixed — `update()` is now called before every interactive command (pen, move, motors) to keep the EiBotBoard session active.
+
+**Cancelling a job mid-plot**
+
+Press **⬛ Cancel Job** in the sidebar at any time during a plot. The app will:
+1. Interrupt the active plot by disconnecting from the plotter
+2. Immediately reconnect, raise the pen, and move to home
+3. Leave the connection open so you can continue working
+
+The connection is automatically re-established after cancel — you do not need to manually reconnect.
 
 **Motion out of range error**
 - A shape or move command is trying to exceed the configured axis limit
