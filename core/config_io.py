@@ -55,8 +55,9 @@ def load_config(path: Path | str | None = None) -> PlotterConfig:
         pen_delay_down = _int  ("motion", "pen_delay_down",  0),
         pen_delay_up   = _int  ("motion", "pen_delay_up",    0),
         const_speed    = _bool ("motion", "const_speed",  False),
-        pen_pos_down   = _int  ("pen",    "pen_pos_down",    5),
-        pen_pos_up     = _int  ("pen",    "pen_pos_up",     30),
+        pen_angle      = _int  ("pen",    "pen_angle",       45),
+        pen_pos_down   = _int  ("pen",    "pen_pos_down",     5),
+        pen_pos_up     = _int  ("pen",    "pen_pos_up",      30),
         x_max_mm       = _float("travel", "x_max_mm",    140.0),
         y_max_mm       = _float("travel", "y_max_mm",     90.0),
         model          = _int  ("device", "model",            2),
@@ -84,6 +85,7 @@ def save_config(cfg: PlotterConfig, path: Path | str | None = None) -> None:
     cp.set("motion", "const_speed",    str(cfg.const_speed).lower())
 
     _ensure("pen")
+    cp.set("pen", "pen_angle",    str(cfg.pen_angle))
     cp.set("pen", "pen_pos_down", str(cfg.pen_pos_down))
     cp.set("pen", "pen_pos_up",   str(cfg.pen_pos_up))
 

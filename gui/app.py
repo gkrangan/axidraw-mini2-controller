@@ -12,7 +12,7 @@ from typing import Optional
 
 import customtkinter as ctk
 
-from core.plotter import Plotter, PlotterConfig, PlotterError
+from core.plotter import Plotter, PlotterConfig, PlotterError, PEN_ANGLE_PRESETS
 from core.image_trace import is_raster, trace_to_svg, SUPPORTED_RASTER
 from core.config_io import load_config, save_config, config_path
 from core import shapes
@@ -258,42 +258,79 @@ class App(ctk.CTk):
         parent.grid_columnconfigure(1, weight=1)
 
         c = self._config
+        row = 0
+
+        # ---- Pen angle selector ----
+        ctk.CTkLabel(parent, text="Pen mount angle", font=("", 12, "bold")).grid(
+            row=row, column=0, padx=12, pady=(10, 2), sticky="w"
+        )
+        angle_options = [f"{a}°" for a in sorted(PEN_ANGLE_PRESETS)]
+        self._pen_angle_var = ctk.StringVar(value=f"{c.pen_angle}°")
+        angle_menu = ctk.CTkOptionMenu(
+            parent,
+            values=angle_options,
+            variable=self._pen_angle_var,
+            command=self._on_angle_changed,
+        )
+        angle_menu.grid(row=row, column=1, padx=12, pady=(10, 2), sticky="w")
+
+        preset_hint = ctk.CTkLabel(
+            parent,
+            text="Selecting an angle loads preset positions — edit below to fine-tune.",
+            font=("", 10),
+            text_color="gray",
+        )
+        preset_hint.grid(row=row + 1, column=0, columnspan=2, padx=12, pady=(0, 8), sticky="w")
+        row += 2
+
+        # ---- All other numeric/text fields ----
         fields = [
-            ("Speed (pen down)",          "speed_pendown",  str(c.speed_pendown)),
-            ("Speed (pen up)",            "speed_penup",    str(c.speed_penup)),
-            ("Pen pos down (0–100)",      "pen_pos_down",   str(c.pen_pos_down)),
-            ("Pen pos up (0–100)",        "pen_pos_up",     str(c.pen_pos_up)),
-            ("Pen delay down (ms)",       "pen_delay_down", str(c.pen_delay_down)),
-            ("Pen delay up (ms)",         "pen_delay_up",   str(c.pen_delay_up)),
-            ("X-axis limit mm  (max 150)", "x_max_mm",      str(c.x_max_mm)),
-            ("Y-axis limit mm  (max 100)", "y_max_mm",      str(c.y_max_mm)),
-            ("Serial port (blank=auto)",  "port",           c.port or ""),
+            ("Pen pos down (0–100)",       "pen_pos_down",   str(c.pen_pos_down)),
+            ("Pen pos up (0–100)",         "pen_pos_up",     str(c.pen_pos_up)),
+            ("Speed (pen down)",           "speed_pendown",  str(c.speed_pendown)),
+            ("Speed (pen up)",             "speed_penup",    str(c.speed_penup)),
+            ("Pen delay down (ms)",        "pen_delay_down", str(c.pen_delay_down)),
+            ("Pen delay up (ms)",          "pen_delay_up",   str(c.pen_delay_up)),
+            ("X-axis limit mm  (max 150)", "x_max_mm",       str(c.x_max_mm)),
+            ("Y-axis limit mm  (max 100)", "y_max_mm",       str(c.y_max_mm)),
+            ("Serial port (blank=auto)",   "port",           c.port or ""),
         ]
         self._settings_entries: dict[str, ctk.CTkEntry] = {}
-        for i, (label, key, default) in enumerate(fields):
-            ctk.CTkLabel(parent, text=label).grid(row=i, column=0, padx=12, pady=6, sticky="w")
+        for label, key, default in fields:
+            ctk.CTkLabel(parent, text=label).grid(row=row, column=0, padx=12, pady=5, sticky="w")
             e = ctk.CTkEntry(parent)
             e.insert(0, default)
-            e.grid(row=i, column=1, padx=12, pady=6, sticky="ew")
+            e.grid(row=row, column=1, padx=12, pady=5, sticky="ew")
             self._settings_entries[key] = e
+            row += 1
 
-        row = len(fields)
         self._const_speed = ctk.CTkCheckBox(parent, text="Constant speed mode")
         if c.const_speed:
             self._const_speed.select()
         self._const_speed.grid(row=row, column=0, columnspan=2, padx=12, pady=8, sticky="w")
+        row += 1
 
-        cfg_label = ctk.CTkLabel(
+        ctk.CTkLabel(
             parent,
             text=f"Config file: {config_path().name}",
             font=("", 10),
             text_color="gray",
-        )
-        cfg_label.grid(row=row + 1, column=0, columnspan=2, padx=12, pady=(0, 4), sticky="w")
+        ).grid(row=row, column=0, columnspan=2, padx=12, pady=(0, 4), sticky="w")
+        row += 1
 
         ctk.CTkButton(parent, text="Apply & Save Settings", command=self._apply_settings).grid(
-            row=row + 2, column=0, columnspan=2, padx=12, pady=8, sticky="ew"
+            row=row, column=0, columnspan=2, padx=12, pady=8, sticky="ew"
         )
+
+    def _on_angle_changed(self, choice: str) -> None:
+        """Auto-fill pen_pos_down/up preset when the angle selector changes."""
+        angle = int(choice.rstrip("°"))
+        down, up = PEN_ANGLE_PRESETS[angle]
+        for key, val in [("pen_pos_down", down), ("pen_pos_up", up)]:
+            entry = self._settings_entries[key]
+            entry.delete(0, "end")
+            entry.insert(0, str(val))
+        self._log(f"Pen angle set to {angle}° — preset positions loaded (down={down}, up={up}).")
 
     # ------------------------------------------------------------------
     # Log tab
@@ -529,10 +566,11 @@ class App(ctk.CTk):
     def _apply_settings(self):
         e = self._settings_entries
         try:
-            self._config.speed_pendown = int(e["speed_pendown"].get())
-            self._config.speed_penup = int(e["speed_penup"].get())
+            self._config.pen_angle = int(self._pen_angle_var.get().rstrip("°"))
             self._config.pen_pos_down = int(e["pen_pos_down"].get())
             self._config.pen_pos_up = int(e["pen_pos_up"].get())
+            self._config.speed_pendown = int(e["speed_pendown"].get())
+            self._config.speed_penup = int(e["speed_penup"].get())
             self._config.pen_delay_down = int(e["pen_delay_down"].get())
             self._config.pen_delay_up = int(e["pen_delay_up"].get())
             self._config.x_max_mm = float(e["x_max_mm"].get())
@@ -549,8 +587,9 @@ class App(ctk.CTk):
         if self._plotter and self._plotter.connected:
             self._plotter.update_config(**{
                 k: getattr(self._config, k)
-                for k in ["speed_pendown", "speed_penup", "pen_pos_down",
-                          "pen_pos_up", "pen_delay_down", "pen_delay_up",
+                for k in ["pen_angle", "pen_pos_down", "pen_pos_up",
+                          "speed_pendown", "speed_penup",
+                          "pen_delay_down", "pen_delay_up",
                           "x_max_mm", "y_max_mm", "const_speed", "port"]
             })
 

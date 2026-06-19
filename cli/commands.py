@@ -25,10 +25,13 @@ def build_parser() -> argparse.ArgumentParser:
                    dest="speed_pendown", help="Pen-down speed 1–100")
     p.add_argument("--speed-up", type=int, default=None, metavar="N",
                    dest="speed_penup", help="Pen-up speed 1–100")
+    p.add_argument("--pen-angle", type=int, default=None, dest="pen_angle",
+                   choices=[45, 90],
+                   help="Pen mount angle (45 or 90 degrees); loads position preset")
     p.add_argument("--pen-down", type=int, default=None, dest="pen_pos_down",
-                   help="Pen-down servo position 0–100")
+                   help="Pen-down servo position 0–100 (overrides angle preset)")
     p.add_argument("--pen-up", type=int, default=None, dest="pen_pos_up",
-                   help="Pen-up servo position 0–100")
+                   help="Pen-up servo position 0–100 (overrides angle preset)")
     p.add_argument("--x-max", type=float, default=None, dest="x_max_mm",
                    help="X-axis travel limit in mm, max 150")
     p.add_argument("--y-max", type=float, default=None, dest="y_max_mm",
@@ -83,7 +86,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def make_config(args) -> PlotterConfig:
     """Load config from .cfg file, then apply any CLI overrides."""
+    from core.plotter import PEN_ANGLE_PRESETS
     cfg = load_config()
+
+    # Apply angle first so explicit --pen-down/up can still override the preset
+    if args.pen_angle is not None:
+        cfg.pen_angle = args.pen_angle
+        cfg.apply_angle_preset()
+
     overrides = {
         "speed_pendown": args.speed_pendown,
         "speed_penup":   args.speed_penup,

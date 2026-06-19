@@ -12,6 +12,14 @@ _Y_HARD_MAX_MM: float = 100.0
 
 MM_PER_INCH: float = 25.4
 
+# Preset servo positions for each supported pen angle.
+# pen_pos_down / pen_pos_up — tuned for each mount angle.
+PEN_ANGLE_PRESETS: dict[int, tuple[int, int]] = {
+    45: (5,  30),   # 45-degree angled mount
+    90: (40, 60),   # straight vertical mount
+}
+SUPPORTED_PEN_ANGLES = tuple(PEN_ANGLE_PRESETS.keys())
+
 try:
     from pyaxidraw import axidraw
     AXIDRAW_AVAILABLE = True
@@ -23,8 +31,9 @@ except ImportError:
 class PlotterConfig:
     speed_pendown: int = 25       # pen-down move speed (1–100)
     speed_penup: int = 75         # pen-up move speed (1–100)
-    pen_pos_down: int = 5         # servo position when pen is down (0–100); 45-deg mount
-    pen_pos_up: int = 30          # servo position when pen is up (0–100); 45-deg mount
+    pen_angle: int = 45           # pen mount angle in degrees (45 or 90)
+    pen_pos_down: int = 5         # servo position when pen is down (0–100)
+    pen_pos_up: int = 30          # servo position when pen is up (0–100)
     pen_delay_down: int = 0       # ms delay after lowering pen
     pen_delay_up: int = 0         # ms delay after raising pen
     const_speed: bool = False     # constant speed mode
@@ -34,7 +43,18 @@ class PlotterConfig:
     y_max_mm: float = 90.0        # configurable Y travel limit (mm); hard cap 100
 
     def __post_init__(self):
+        self._validate_pen_angle()
         self._validate_limits()
+
+    def _validate_pen_angle(self):
+        if self.pen_angle not in PEN_ANGLE_PRESETS:
+            raise ValueError(
+                f"pen_angle must be one of {list(PEN_ANGLE_PRESETS)} (got {self.pen_angle})"
+            )
+
+    def apply_angle_preset(self) -> None:
+        """Overwrite pen_pos_down/up with the preset for the current pen_angle."""
+        self.pen_pos_down, self.pen_pos_up = PEN_ANGLE_PRESETS[self.pen_angle]
 
     def _validate_limits(self):
         if not (0 < self.x_max_mm <= _X_HARD_MAX_MM):
