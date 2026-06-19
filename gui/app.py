@@ -37,9 +37,11 @@ class App(ctk.CTk):
         self.resizable(True, True)
 
         self._plotter: Optional[Plotter] = None
-        self._config = load_config()
+        self._cfg = load_config()
         self._file_path: Optional[str] = None   # currently loaded file
         self._svg_path: Optional[str] = None    # SVG ready to plot (may be traced)
+        self._cancel_event = threading.Event()  # set to request job cancellation
+        self._job_running = False               # True while a plot/shape job is active
 
         self._build_ui()
 
@@ -114,6 +116,14 @@ class App(ctk.CTk):
             command=self._plot_file
         )
         self._btn_plot.grid(row=14, column=0, padx=16, pady=6, sticky="ew")
+
+        self._btn_cancel = ctk.CTkButton(
+            sidebar, text="⬛  Cancel Job",
+            fg_color="#8b0000", hover_color="#5a0000",
+            command=self._cancel_job,
+            state="disabled",
+        )
+        self._btn_cancel.grid(row=15, column=0, padx=16, pady=(0, 6), sticky="ew")
 
         # Theme toggle at bottom
         ctk.CTkLabel(sidebar, text="Appearance").grid(row=21, column=0, padx=16, pady=(0, 2), sticky="w")
@@ -1118,18 +1128,72 @@ class App(ctk.CTk):
         self._log(f"Settings saved to {config_path().name}.")
 
     # ------------------------------------------------------------------
+    # Job management
+    # ------------------------------------------------------------------
+
+    def _set_job_running(self, running: bool):
+        """Enable/disable the Cancel button and track job state (call from any thread)."""
+        self._job_running = running
+        state = "normal" if running else "disabled"
+        self.after(0, lambda: self._btn_cancel.configure(state=state))
+
+    def _cancel_job(self):
+        """
+        Emergency stop: signal the running job to abort, then recover —
+        pen up and move to home — in a background thread so the GUI stays live.
+        """
+        if not self._job_running:
+            return
+        self._log("⬛ Cancel requested — stopping job and recovering…")
+        self._cancel_event.set()
+
+        def recover():
+            try:
+                # Disconnect interrupts any blocking plot_run() call
+                if self._plotter and self._plotter.connected:
+                    self._plotter.disconnect()
+
+                # Reconnect just long enough to raise the pen and go home
+                if self._plotter:
+                    self._plotter.connect()
+                    try:
+                        self._plotter.pen_up()
+                        self._plotter.go_home()
+                    finally:
+                        # Leave connection open so the user can keep working
+                        pass
+
+                self.after(0, lambda: self._log("✓ Job cancelled — pen up, returned to home."))
+                self.after(0, self._update_position_display)
+            except Exception as e:
+                self.after(0, lambda: self._log(f"Recovery error: {e}"))
+            finally:
+                self._cancel_event.clear()
+                self._set_job_running(False)
+
+        threading.Thread(target=recover, daemon=True).start()
+
+    # ------------------------------------------------------------------
     # Threading helper
     # ------------------------------------------------------------------
 
     def _run_in_thread(self, fn, success: str, fail_prefix: str):
+        self._cancel_event.clear()
+        self._set_job_running(True)
+
         def worker():
             try:
                 fn()
-                self.after(0, lambda: self._log(success))
+                if not self._cancel_event.is_set():
+                    self.after(0, lambda: self._log(success))
             except Exception as e:
-                msg = str(e)
-                self.after(0, lambda: self._log(f"{fail_prefix}: {msg}"))
-                self.after(0, lambda: mb.showerror("Error", msg))
+                if not self._cancel_event.is_set():
+                    msg = str(e)
+                    self.after(0, lambda: self._log(f"{fail_prefix}: {msg}"))
+                    self.after(0, lambda: mb.showerror("Error", msg))
+            finally:
+                if not self._cancel_event.is_set():
+                    self._set_job_running(False)
 
         threading.Thread(target=worker, daemon=True).start()
 
