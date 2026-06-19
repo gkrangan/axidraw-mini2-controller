@@ -303,14 +303,36 @@ class Plotter:
     # ------------------------------------------------------------------
 
     def plot_svg(self, svg_path: str) -> None:
-        """Plot an SVG file using the axidraw plot API."""
+        """
+        Plot an SVG file using the axidraw plot API.
+
+        The interactive session must be suspended first — pyaxidraw's plot
+        mode opens its own serial connection, and two simultaneous connections
+        to the same USB port crash the EiBotBoard firmware. We disconnect the
+        interactive session, run the plot, then reconnect so manual controls
+        keep working afterwards.
+        """
         if not os.path.isfile(svg_path):
             raise FileNotFoundError(f"SVG file not found: {svg_path}")
 
-        ad = axidraw.AxiDraw()
-        ad.plot_setup(svg_path)
-        self._apply_options_on(ad)
-        ad.plot_run()
+        # Suspend interactive session to free the serial port
+        was_connected = self.connected
+        if was_connected:
+            self._ad.disconnect()
+            self._ad = None
+
+        try:
+            ad = axidraw.AxiDraw()
+            ad.plot_setup(svg_path)
+            self._apply_options_on(ad)
+            ad.plot_run()
+        finally:
+            # Restore interactive session so manual controls keep working
+            if was_connected:
+                try:
+                    self.connect()
+                except Exception:
+                    pass  # best-effort reconnect; caller can reconnect manually
 
     def _apply_options_on(self, ad) -> None:
         c = self.config

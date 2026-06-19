@@ -1095,7 +1095,8 @@ class App(ctk.CTk):
         if not self._file_path or not is_raster(self._file_path):
             mb.showwarning("No Image", "Load a raster image in the Image Trace tab first.")
             return
-        self._do_trace(self._file_path)
+        src = self._file_path
+        self._run_in_thread(lambda: self._do_trace(src), "Trace complete.", "Trace failed")
 
     def _trace_and_plot(self):
         if not self._file_path or not is_raster(self._file_path):
@@ -1103,12 +1104,18 @@ class App(ctk.CTk):
             return
         if not self._require_connection():
             return
-        svg = self._do_trace(self._file_path)
-        if svg:
-            self._svg_path = svg
-            self._log(f"Plotting traced SVG: {svg}")
-            self._run_in_thread(lambda: self._plotter.plot_svg(svg),
-                                "Trace & plot complete.", "Plot failed")
+        src = self._file_path
+
+        # Run trace AND plot entirely in a background thread so any in-process
+        # library crash (hatchsvg, etc.) cannot kill the GUI main thread.
+        def _trace_then_plot():
+            svg = self._do_trace(src)
+            if svg:
+                self.after(0, lambda: setattr(self, "_svg_path", svg))
+                self._log(f"Plotting traced SVG: {svg}")
+                self._plotter.plot_svg(svg)
+
+        self._run_in_thread(_trace_then_plot, "Trace & plot complete.", "Trace/plot failed")
 
     # ------------------------------------------------------------------
     # Settings
