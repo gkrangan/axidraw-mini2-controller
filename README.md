@@ -592,8 +592,8 @@ pip install customtkinter
 
 ### AxiDraw Hardware & Official Software
 
-- [AxiDraw Mini 2 — Evil Mad Scientist product page](https://shop.evilmadscientist.com/productsmenu/AxiDraw)
-- [AxiDraw documentation & user guide](https://axidraw.com/doc/py_api/)
+- [AxiDraw MiniKit 2 — Evil Mad Scientist product page](https://shop.evilmadscientist.com/productsmenu/924)
+- [AxiDraw Python Module documentation](https://axidraw.com/doc/py_api/#)
 - [EiBotBoard firmware & USB driver](https://evil-mad.github.io/EggBot/ebb.html) — required for USB communication on all platforms
 - [AxiDraw CLI & Inkscape extension](https://github.com/evil-mad/axidraw) — official Evil Mad Scientist GitHub
 
@@ -602,7 +602,7 @@ pip install customtkinter
 | Library | PyPI | Description |
 |---|---|---|
 | `pyaxidraw` | [pypi.org/project/pyaxidraw](https://pypi.org/project/pyaxidraw/) | Official AxiDraw Python API |
-| `hatchsvg` | [pypi.org/project/hatchsvg](https://pypi.org/project/hatchsvg/) | Raster → hatched plotter SVG |
+| `hatchsvg` | [pypi.org/project/hatchsvg](https://pypi.org/project/hatchsvg/) | Raster → hatched plotter SVG (PNG, JPG, WebP, BMP, GIF, TIFF) |
 | `vtracer` | [pypi.org/project/vtracer](https://pypi.org/project/vtracer/) | Raster → outline SVG tracing |
 | `customtkinter` | [pypi.org/project/customtkinter](https://pypi.org/project/customtkinter/) | Modern dark-themed tkinter GUI |
 | `Pillow` | [pypi.org/project/Pillow](https://pypi.org/project/Pillow/) | Image decoding and processing |
@@ -614,7 +614,7 @@ pip install customtkinter
 
 ### Image Tracing References
 
-- [hatchsvg on PyPI](https://pypi.org/project/hatchsvg/) — hatching algorithm, `RenderParams` options, and CLI usage
+- [hatchsvg on PyPI](https://pypi.org/project/hatchsvg/) — hatching algorithm, `RenderParams` options, CLI usage, and supported formats
 - [vtracer on PyPI](https://pypi.org/project/vtracer/) — colour quantisation and outline tracing parameters
 - [plottertools/hatched](https://github.com/plottertools/hatched) — alternative hatching library for reference
 - [Generative SVG for Pen Plotters (Python)](https://tabreturn.github.io/code/python/svg/thonny/2022/02/03/generative_svg_for_pen_plotters_using_python.html) — guide on generating plotter-ready SVG with Python
