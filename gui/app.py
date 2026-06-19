@@ -263,6 +263,8 @@ class App(ctk.CTk):
             ("Pen pos up (0–100)", "pen_pos_up", "60"),
             ("Pen delay down (ms)", "pen_delay_down", "0"),
             ("Pen delay up (ms)", "pen_delay_up", "0"),
+            ("X-axis limit mm  (max 150)", "x_max_mm", "140"),
+            ("Y-axis limit mm  (max 100)", "y_max_mm", "90"),
             ("Serial port (blank=auto)", "port", ""),
         ]
         self._settings_entries: dict[str, ctk.CTkEntry] = {}
@@ -521,9 +523,13 @@ class App(ctk.CTk):
             self._config.pen_pos_up = int(e["pen_pos_up"].get())
             self._config.pen_delay_down = int(e["pen_delay_down"].get())
             self._config.pen_delay_up = int(e["pen_delay_up"].get())
+            self._config.x_max_mm = float(e["x_max_mm"].get())
+            self._config.y_max_mm = float(e["y_max_mm"].get())
             self._config.const_speed = bool(self._const_speed.get())
             port_val = e["port"].get().strip()
             self._config.port = port_val if port_val else None
+            # raises ValueError if limits are out of range
+            self._config._validate_limits()
         except ValueError as ex:
             mb.showerror("Settings Error", str(ex))
             return
@@ -533,7 +539,7 @@ class App(ctk.CTk):
                 k: getattr(self._config, k)
                 for k in ["speed_pendown", "speed_penup", "pen_pos_down",
                           "pen_pos_up", "pen_delay_down", "pen_delay_up",
-                          "const_speed", "port"]
+                          "x_max_mm", "y_max_mm", "const_speed", "port"]
             })
         self._log("Settings applied.")
 

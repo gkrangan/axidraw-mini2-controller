@@ -25,6 +25,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Pen-down servo position 0–100 (default: 40)")
     p.add_argument("--pen-up", type=int, default=60, dest="pen_pos_up",
                    help="Pen-up servo position 0–100 (default: 60)")
+    p.add_argument("--x-max", type=float, default=140.0, dest="x_max_mm",
+                   help="X-axis travel limit in mm, max 150 (default: 140)")
+    p.add_argument("--y-max", type=float, default=90.0, dest="y_max_mm",
+                   help="Y-axis travel limit in mm, max 100 (default: 90)")
 
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -79,6 +83,8 @@ def make_config(args) -> PlotterConfig:
         speed_penup=args.speed_up,
         pen_pos_down=args.pen_pos_down,
         pen_pos_up=args.pen_pos_up,
+        x_max_mm=args.x_max_mm,
+        y_max_mm=args.y_max_mm,
         port=getattr(args, "port", None),
     )
 

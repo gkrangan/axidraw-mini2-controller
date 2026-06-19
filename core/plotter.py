@@ -6,6 +6,12 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
+# Hard physical limits for the AxiDraw Mini 2 travel area (mm)
+_X_HARD_MAX_MM: float = 150.0
+_Y_HARD_MAX_MM: float = 100.0
+
+MM_PER_INCH: float = 25.4
+
 try:
     from pyaxidraw import axidraw
     AXIDRAW_AVAILABLE = True
@@ -24,6 +30,29 @@ class PlotterConfig:
     const_speed: bool = False     # constant speed mode
     model: int = 2                # AxiDraw model (2 = Mini)
     port: Optional[str] = None    # serial port; None = auto-detect
+    x_max_mm: float = 140.0       # configurable X travel limit (mm); hard cap 150
+    y_max_mm: float = 90.0        # configurable Y travel limit (mm); hard cap 100
+
+    def __post_init__(self):
+        self._validate_limits()
+
+    def _validate_limits(self):
+        if not (0 < self.x_max_mm <= _X_HARD_MAX_MM):
+            raise ValueError(
+                f"x_max_mm must be > 0 and ≤ {_X_HARD_MAX_MM} mm (got {self.x_max_mm})"
+            )
+        if not (0 < self.y_max_mm <= _Y_HARD_MAX_MM):
+            raise ValueError(
+                f"y_max_mm must be > 0 and ≤ {_Y_HARD_MAX_MM} mm (got {self.y_max_mm})"
+            )
+
+    @property
+    def x_max_in(self) -> float:
+        return self.x_max_mm / MM_PER_INCH
+
+    @property
+    def y_max_in(self) -> float:
+        return self.y_max_mm / MM_PER_INCH
 
 
 class PlotterError(Exception):
@@ -94,6 +123,7 @@ class Plotter:
             if not hasattr(self.config, k):
                 raise ValueError(f"Unknown config field: {k}")
             setattr(self.config, k, v)
+        self.config._validate_limits()
         if self._ad:
             self._apply_config()
 
@@ -104,6 +134,18 @@ class Plotter:
     def _require_connection(self) -> None:
         if not self._ad:
             raise PlotterError("Not connected. Call connect() first.")
+
+    def _check_bounds(self, x_in: float, y_in: float) -> None:
+        if x_in < 0 or x_in > self.config.x_max_in:
+            raise PlotterError(
+                f"X={x_in * MM_PER_INCH:.1f} mm is out of range "
+                f"(0–{self.config.x_max_mm} mm)"
+            )
+        if y_in < 0 or y_in > self.config.y_max_in:
+            raise PlotterError(
+                f"Y={y_in * MM_PER_INCH:.1f} mm is out of range "
+                f"(0–{self.config.y_max_mm} mm)"
+            )
 
     def pen_up(self) -> None:
         self._require_connection()
@@ -116,11 +158,13 @@ class Plotter:
     def move_to(self, x: float, y: float) -> None:
         """Move to absolute position (inches) with pen up."""
         self._require_connection()
+        self._check_bounds(x, y)
         self._ad.moveto(x, y)
 
     def line_to(self, x: float, y: float) -> None:
         """Draw to absolute position (inches) with pen down."""
         self._require_connection()
+        self._check_bounds(x, y)
         self._ad.lineto(x, y)
 
     def go_home(self) -> None:
