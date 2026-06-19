@@ -141,75 +141,169 @@ class App(ctk.CTk):
     # Shapes tab
     # ------------------------------------------------------------------
 
+    # Defaults for each unit — (mm_val, in_val)
+    _SHAPE_DEFAULTS = {
+        "X":      ("10",   "0.4"),
+        "Y":      ("10",   "0.4"),
+        "W":      ("50",   "2.0"),
+        "H":      ("30",   "1.2"),
+        "Side":   ("40",   "1.6"),
+        "CX":     ("50",   "2.0"),
+        "CY":     ("45",   "1.8"),
+        "R":      ("20",   "0.8"),
+        "RX":     ("25",   "1.0"),
+        "RY":     ("15",   "0.6"),
+        "Sides":  ("6",    "6"),
+        "Points": ("5",    "5"),
+        "R Out":  ("20",   "0.8"),
+        "R In":   ("10",   "0.4"),
+        "X1":     ("10",   "0.4"),
+        "Y1":     ("10",   "0.4"),
+        "X2":     ("80",   "3.1"),
+        "Y2":     ("60",   "2.4"),
+        "X (pos)": ("10",  "0.4"),
+        "Y (pos)": ("10",  "0.4"),
+        "Size (pt)": ("12", "12"),
+    }
+
     def _build_shapes_tab(self, parent):
-        parent.grid_columnconfigure(0, weight=1)
+        # Wrap in a scrollable frame so all shapes fit
+        scroll = ctk.CTkScrollableFrame(parent)
+        scroll.pack(fill="both", expand=True)
+        scroll.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        p = scroll  # shorthand
 
         row = 0
-        ctk.CTkLabel(parent, text="Generate & Plot Shapes", font=("", 14, "bold")).grid(
-            row=row, column=0, columnspan=4, pady=(8, 12), sticky="w", padx=8
+        ctk.CTkLabel(p, text="Generate & Plot Shapes", font=("", 14, "bold")).grid(
+            row=row, column=0, columnspan=4, pady=(8, 4), sticky="w", padx=8
         )
 
-        # Rectangle
+        # Unit toggle
         row += 1
-        ctk.CTkLabel(parent, text="Rectangle", font=("", 12, "bold")).grid(
-            row=row, column=0, columnspan=4, padx=8, pady=(4, 0), sticky="w"
+        unit_frame = ctk.CTkFrame(p, fg_color="transparent")
+        unit_frame.grid(row=row, column=0, columnspan=4, padx=8, pady=(0, 8), sticky="w")
+        ctk.CTkLabel(unit_frame, text="Units:", font=("", 12)).pack(side="left", padx=(0, 6))
+        self._shape_unit = ctk.CTkSegmentedButton(
+            unit_frame, values=["mm", "in"],
+            command=self._on_shape_unit_change, width=100
         )
-        row += 1
-        self._rect = self._field_row(parent, row, ["X (in)", "Y (in)", "W (in)", "H (in)"],
-                                     ["0.5", "0.5", "3.0", "2.0"])
-        row += 1
-        ctk.CTkButton(parent, text="Plot Rectangle", command=self._plot_rect).grid(
-            row=row, column=0, columnspan=4, padx=8, pady=4, sticky="ew"
-        )
+        self._shape_unit.set("mm")
+        self._shape_unit.pack(side="left")
 
-        # Circle
-        row += 1
-        ctk.CTkLabel(parent, text="Circle", font=("", 12, "bold")).grid(
-            row=row, column=0, columnspan=4, padx=8, pady=(12, 0), sticky="w"
-        )
-        row += 1
-        self._circ = self._field_row(parent, row, ["CX (in)", "CY (in)", "R (in)"],
-                                     ["2.0", "1.5", "1.0"])
-        row += 1
-        ctk.CTkButton(parent, text="Plot Circle", command=self._plot_circle).grid(
-            row=row, column=0, columnspan=4, padx=8, pady=4, sticky="ew"
-        )
+        # Holds (CTkLabel widget, field_key) so we can relabel on unit change
+        self._shape_unit_labels: list[tuple] = []
+        # Holds (CTkEntry widget, field_key) so we can swap defaults on unit change
+        self._shape_unit_entries: list[tuple] = []
 
-        # Polygon
-        row += 1
-        ctk.CTkLabel(parent, text="Regular Polygon", font=("", 12, "bold")).grid(
-            row=row, column=0, columnspan=4, padx=8, pady=(12, 0), sticky="w"
-        )
-        row += 1
-        self._poly = self._field_row(parent, row, ["CX (in)", "CY (in)", "R (in)", "Sides"],
-                                     ["2.0", "1.5", "1.0", "6"])
-        row += 1
-        ctk.CTkButton(parent, text="Plot Polygon", command=self._plot_polygon).grid(
-            row=row, column=0, columnspan=4, padx=8, pady=4, sticky="ew"
-        )
+        def section(title, top_pad=12):
+            nonlocal row
+            row += 1
+            ctk.CTkFrame(p, height=1, fg_color="#444").grid(
+                row=row, column=0, columnspan=4, padx=8, pady=(top_pad, 0), sticky="ew"
+            )
+            row += 1
+            ctk.CTkLabel(p, text=title, font=("", 12, "bold")).grid(
+                row=row, column=0, columnspan=4, padx=8, pady=(4, 2), sticky="w"
+            )
 
-        # Text
+        def fields(keys: list[str], cols=4) -> dict:
+            """Add a row of labelled entry fields; returns {key: CTkEntry}."""
+            nonlocal row
+            row += 1
+            entries: dict[str, ctk.CTkEntry] = {}
+            for col_idx, key in enumerate(keys):
+                col = col_idx % cols
+                if col_idx > 0 and col == 0:
+                    row += 1
+                unit = self._shape_unit.get()
+                defs = self._SHAPE_DEFAULTS.get(key, ("", ""))
+                default = defs[0] if unit == "mm" else defs[1]
+                suffix = "" if key in ("Sides", "Points", "Size (pt)") else f" ({unit})"
+                lbl_text = key + suffix
+                lbl = ctk.CTkLabel(p, text=lbl_text, font=("", 10))
+                lbl.grid(row=row, column=col, padx=(8, 2), pady=(4, 0), sticky="w")
+                row += 1
+                e = ctk.CTkEntry(p, width=80)
+                e.insert(0, default)
+                e.grid(row=row, column=col, padx=(8, 2), pady=(0, 4), sticky="ew")
+                entries[key] = e
+                if key not in ("Sides", "Points", "Size (pt)"):
+                    self._shape_unit_labels.append((lbl, key))
+                    self._shape_unit_entries.append((e, key))
+                row -= 1  # stay on same row for next col
+            row += 1      # advance past entry row
+            return entries
+
+        def plot_btn(text, cmd):
+            nonlocal row
+            row += 1
+            ctk.CTkButton(p, text=text, command=cmd).grid(
+                row=row, column=0, columnspan=4, padx=8, pady=(2, 6), sticky="ew"
+            )
+
+        # ---- Rectangle ----
+        section("Rectangle", top_pad=4)
+        self._rect = fields(["X", "Y", "W", "H"])
+        plot_btn("Plot Rectangle", self._plot_rect)
+
+        # ---- Square ----
+        section("Square")
+        self._sqr = fields(["X", "Y", "Side"])
+        plot_btn("Plot Square", self._plot_square)
+
+        # ---- Circle ----
+        section("Circle")
+        self._circ = fields(["CX", "CY", "R"])
+        plot_btn("Plot Circle", self._plot_circle)
+
+        # ---- Ellipse ----
+        section("Ellipse")
+        self._ellipse = fields(["CX", "CY", "RX", "RY"])
+        plot_btn("Plot Ellipse", self._plot_ellipse)
+
+        # ---- Triangle ----
+        section("Equilateral Triangle")
+        self._tri = fields(["CX", "CY", "Side"])
+        plot_btn("Plot Triangle", self._plot_triangle)
+
+        # ---- Regular Polygon ----
+        section("Regular Polygon")
+        self._poly = fields(["CX", "CY", "R", "Sides"])
+        plot_btn("Plot Polygon", self._plot_polygon)
+
+        # ---- Star ----
+        section("Star")
+        self._star = fields(["CX", "CY", "R Out", "R In", "Points"])
+        plot_btn("Plot Star", self._plot_star)
+
+        # ---- Line ----
+        section("Line")
+        self._line = fields(["X1", "Y1", "X2", "Y2"])
+        plot_btn("Plot Line", self._plot_line)
+
+        # ---- Text ----
+        section("Text")
         row += 1
-        ctk.CTkLabel(parent, text="Text", font=("", 12, "bold")).grid(
-            row=row, column=0, columnspan=4, padx=8, pady=(12, 0), sticky="w"
-        )
-        row += 1
-        self._text_entry = ctk.CTkEntry(parent, placeholder_text="Text to draw")
-        self._text_entry.grid(row=row, column=0, columnspan=2, padx=8, pady=4, sticky="ew")
-        self._txt = self._field_row(parent, row, ["X (in)", "Y (in)", "Size (pt)"],
-                                    ["0.5", "1.0", "24"], start_col=2)
-        row += 1
+        self._text_entry = ctk.CTkEntry(p, placeholder_text="Text to draw")
+        self._text_entry.grid(row=row, column=0, columnspan=4, padx=8, pady=4, sticky="ew")
+        self._txt = fields(["X (pos)", "Y (pos)", "Size (pt)"])
         _HERSHEY_FONTS = ["futural", "futuram", "cursive", "gothgbt", "gothgrt", "scripts", "cyrillic"]
-        ctk.CTkLabel(parent, text="Font", font=("", 10)).grid(
-            row=row, column=0, padx=(8, 2), sticky="w"
-        )
-        self._txt_font = ctk.CTkOptionMenu(parent, values=_HERSHEY_FONTS, width=120)
-        self._txt_font.set("futural")
-        self._txt_font.grid(row=row, column=1, padx=4, pady=4, sticky="w")
         row += 1
-        ctk.CTkButton(parent, text="Plot Text", command=self._plot_text).grid(
-            row=row, column=0, columnspan=4, padx=8, pady=4, sticky="ew"
-        )
+        ctk.CTkLabel(p, text="Font", font=("", 10)).grid(row=row, column=0, padx=(8,2), sticky="w")
+        self._txt_font = ctk.CTkOptionMenu(p, values=_HERSHEY_FONTS, width=140)
+        self._txt_font.set("futural")
+        self._txt_font.grid(row=row, column=1, columnspan=2, padx=4, pady=4, sticky="w")
+        plot_btn("Plot Text", self._plot_text)
+
+    def _on_shape_unit_change(self, unit: str):
+        """Update all field labels and swap defaults when unit toggle changes."""
+        for lbl, key in self._shape_unit_labels:
+            lbl.configure(text=f"{key} ({unit})")
+        defs_idx = 0 if unit == "mm" else 1
+        for e, key in self._shape_unit_entries:
+            defs = self._SHAPE_DEFAULTS.get(key, ("", ""))
+            e.delete(0, "end")
+            e.insert(0, defs[defs_idx])
 
     def _field_row(self, parent, row, labels, defaults, start_col=0):
         entries = {}
@@ -773,32 +867,108 @@ class App(ctk.CTk):
         self._log(f"Plotting {label}…")
         self._run_in_thread(lambda: self._plotter.plot_svg(tmp), f"{label} done.", f"{label} failed")
 
+    def _shape_kwargs(self) -> dict:
+        """Return unit and plotter limits to pass to every shape function."""
+        unit = self._shape_unit.get()
+        cfg = self._plotter.config if self._plotter else self._cfg
+        return {"unit": unit, "x_max_mm": cfg.x_max_mm, "y_max_mm": cfg.y_max_mm}
+
+    def _shape_error(self, err: Exception, shape: str):
+        mb.showerror("Shape Error", f"{shape}: {err}")
+
+    def _fv(self, d: dict, key: str) -> float:
+        return float(d[key].get())
+
     def _plot_rect(self):
         try:
-            x, y, w, h = [float(self._rect[k].get()) for k in ["X (in)", "Y (in)", "W (in)", "H (in)"]]
-            svg = shapes.rect_svg(x, y, w, h)
+            kw = self._shape_kwargs()
+            svg = shapes.rect_svg(
+                self._fv(self._rect, "X"), self._fv(self._rect, "Y"),
+                self._fv(self._rect, "W"), self._fv(self._rect, "H"), **kw
+            )
             self._plot_shape_svg(svg, "Rectangle")
-        except ValueError:
-            mb.showerror("Input Error", "Enter valid numbers for rectangle dimensions.")
+        except Exception as e:
+            self._shape_error(e, "Rectangle")
+
+    def _plot_square(self):
+        try:
+            kw = self._shape_kwargs()
+            svg = shapes.square_svg(
+                self._fv(self._sqr, "X"), self._fv(self._sqr, "Y"),
+                self._fv(self._sqr, "Side"), **kw
+            )
+            self._plot_shape_svg(svg, "Square")
+        except Exception as e:
+            self._shape_error(e, "Square")
 
     def _plot_circle(self):
         try:
-            cx, cy, r = [float(self._circ[k].get()) for k in ["CX (in)", "CY (in)", "R (in)"]]
-            svg = shapes.circle_svg(cx, cy, r)
+            kw = self._shape_kwargs()
+            svg = shapes.circle_svg(
+                self._fv(self._circ, "CX"), self._fv(self._circ, "CY"),
+                self._fv(self._circ, "R"), **kw
+            )
             self._plot_shape_svg(svg, "Circle")
-        except ValueError:
-            mb.showerror("Input Error", "Enter valid numbers for circle dimensions.")
+        except Exception as e:
+            self._shape_error(e, "Circle")
+
+    def _plot_ellipse(self):
+        try:
+            kw = self._shape_kwargs()
+            svg = shapes.ellipse_svg(
+                self._fv(self._ellipse, "CX"), self._fv(self._ellipse, "CY"),
+                self._fv(self._ellipse, "RX"), self._fv(self._ellipse, "RY"), **kw
+            )
+            self._plot_shape_svg(svg, "Ellipse")
+        except Exception as e:
+            self._shape_error(e, "Ellipse")
+
+    def _plot_triangle(self):
+        try:
+            kw = self._shape_kwargs()
+            svg = shapes.triangle_svg(
+                self._fv(self._tri, "CX"), self._fv(self._tri, "CY"),
+                self._fv(self._tri, "Side"), **kw
+            )
+            self._plot_shape_svg(svg, "Triangle")
+        except Exception as e:
+            self._shape_error(e, "Triangle")
 
     def _plot_polygon(self):
         try:
-            cx = float(self._poly["CX (in)"].get())
-            cy = float(self._poly["CY (in)"].get())
-            r = float(self._poly["R (in)"].get())
+            kw = self._shape_kwargs()
             sides = int(self._poly["Sides"].get())
-            svg = shapes.polygon_svg(cx, cy, r, sides)
-            self._plot_shape_svg(svg, f"{sides}-gon")
-        except ValueError:
-            mb.showerror("Input Error", "Enter valid values for polygon.")
+            svg = shapes.polygon_svg(
+                self._fv(self._poly, "CX"), self._fv(self._poly, "CY"),
+                self._fv(self._poly, "R"), sides, **kw
+            )
+            self._plot_shape_svg(svg, f"{sides}-sided Polygon")
+        except Exception as e:
+            self._shape_error(e, "Polygon")
+
+    def _plot_star(self):
+        try:
+            kw = self._shape_kwargs()
+            pts = int(self._star["Points"].get())
+            svg = shapes.star_svg(
+                self._fv(self._star, "CX"), self._fv(self._star, "CY"),
+                self._fv(self._star, "R Out"), self._fv(self._star, "R In"),
+                pts, **kw
+            )
+            self._plot_shape_svg(svg, f"{pts}-point Star")
+        except Exception as e:
+            self._shape_error(e, "Star")
+
+    def _plot_line(self):
+        try:
+            kw = self._shape_kwargs()
+            svg = shapes.line_svg(
+                self._fv(self._line, "X1"), self._fv(self._line, "Y1"),
+                self._fv(self._line, "X2"), self._fv(self._line, "Y2"), **kw
+            )
+            self._plot_shape_svg(svg, "Line")
+        except Exception as e:
+            self._shape_error(e, "Line")
 
     def _plot_text(self):
         text = self._text_entry.get().strip()
@@ -806,14 +976,16 @@ class App(ctk.CTk):
             mb.showwarning("No Text", "Enter text to draw.")
             return
         try:
-            x = float(self._txt["X (in)"].get())
-            y = float(self._txt["Y (in)"].get())
-            size = float(self._txt["Size (pt)"].get())
-            font = self._txt_font.get()
-            svg = shapes.text_svg(text, x, y, size, font)
+            kw = self._shape_kwargs()
+            svg = shapes.text_svg(
+                text,
+                self._fv(self._txt, "X (pos)"), self._fv(self._txt, "Y (pos)"),
+                self._fv(self._txt, "Size (pt)"),
+                self._txt_font.get(), **kw
+            )
             self._plot_shape_svg(svg, "Text")
-        except ValueError:
-            mb.showerror("Input Error", "Enter valid numbers for text position/size.")
+        except Exception as e:
+            self._shape_error(e, "Text")
 
     # ------------------------------------------------------------------
     # Image trace

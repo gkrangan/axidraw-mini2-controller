@@ -100,24 +100,51 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("dy", type=float, help="Y offset in mm (negative = up)")
 
     # draw-shape
-    sp = sub.add_parser("draw-shape", help="Draw a basic shape")
+    sp = sub.add_parser("draw-shape", help="Draw a shape and plot it")
     shape_sub = sp.add_subparsers(dest="shape", required=True)
 
-    rp = shape_sub.add_parser("rect", help="Draw a rectangle")
+    # Shared unit flag added to every shape parser
+    def _add_unit(p):
+        p.add_argument("--unit", choices=["mm", "in"], default="mm",
+                       help="Unit for all dimensions (default: mm)")
+        return p
+
+    rp = _add_unit(shape_sub.add_parser("rect", help="Rectangle (top-left x y, width w, height h)"))
     rp.add_argument("x", type=float); rp.add_argument("y", type=float)
     rp.add_argument("w", type=float); rp.add_argument("h", type=float)
 
-    cp = shape_sub.add_parser("circle", help="Draw a circle")
+    sqp = _add_unit(shape_sub.add_parser("square", help="Square (top-left x y, side length)"))
+    sqp.add_argument("x", type=float); sqp.add_argument("y", type=float)
+    sqp.add_argument("side", type=float)
+
+    cp = _add_unit(shape_sub.add_parser("circle", help="Circle (centre cx cy, radius r)"))
     cp.add_argument("cx", type=float); cp.add_argument("cy", type=float)
     cp.add_argument("r", type=float)
 
-    pp = shape_sub.add_parser("polygon", help="Draw a regular polygon")
+    ep = _add_unit(shape_sub.add_parser("ellipse", help="Ellipse (centre cx cy, x-radius rx, y-radius ry)"))
+    ep.add_argument("cx", type=float); ep.add_argument("cy", type=float)
+    ep.add_argument("rx", type=float); ep.add_argument("ry", type=float)
+
+    trp = _add_unit(shape_sub.add_parser("triangle", help="Equilateral triangle (centre cx cy, side length)"))
+    trp.add_argument("cx", type=float); trp.add_argument("cy", type=float)
+    trp.add_argument("side", type=float)
+
+    pp = _add_unit(shape_sub.add_parser("polygon", help="Regular polygon (centre cx cy, circumradius r, sides)"))
     pp.add_argument("cx", type=float); pp.add_argument("cy", type=float)
     pp.add_argument("r", type=float); pp.add_argument("sides", type=int)
 
-    tp = shape_sub.add_parser("text", help="Draw text")
+    stp = _add_unit(shape_sub.add_parser("star", help="Star (centre cx cy, outer-radius, inner-radius, points)"))
+    stp.add_argument("cx", type=float); stp.add_argument("cy", type=float)
+    stp.add_argument("r_outer", type=float); stp.add_argument("r_inner", type=float)
+    stp.add_argument("points", type=int)
+
+    lp = _add_unit(shape_sub.add_parser("line", help="Straight line (x1 y1 x2 y2)"))
+    lp.add_argument("x1", type=float); lp.add_argument("y1", type=float)
+    lp.add_argument("x2", type=float); lp.add_argument("y2", type=float)
+
+    tp = _add_unit(shape_sub.add_parser("text", help="Draw text at position (x y)"))
     tp.add_argument("text"); tp.add_argument("x", type=float); tp.add_argument("y", type=float)
-    tp.add_argument("--size", type=float, default=24, help="Font size in pt")
+    tp.add_argument("--size", type=float, default=12, help="Font size in pt (default: 12)")
     tp.add_argument("--font", default="futural",
                     choices=["futural","futuram","cursive","gothgbt","gothgrt","scripts","cyrillic"],
                     help="Hershey stroke font (default: futural)")
@@ -261,16 +288,36 @@ def _cmd_draw_shape(args, plotter: Plotter):
     import tempfile, os
 
     shape = args.shape
-    if shape == "rect":
-        svg = shapes.rect_svg(args.x, args.y, args.w, args.h)
-    elif shape == "circle":
-        svg = shapes.circle_svg(args.cx, args.cy, args.r)
-    elif shape == "polygon":
-        svg = shapes.polygon_svg(args.cx, args.cy, args.r, args.sides)
-    elif shape == "text":
-        svg = shapes.text_svg(args.text, args.x, args.y, args.size, args.font)
-    else:
-        print(f"Unknown shape: {shape}", file=sys.stderr)
+    kw = {
+        "unit": args.unit,
+        "x_max_mm": plotter.config.x_max_mm,
+        "y_max_mm": plotter.config.y_max_mm,
+    }
+
+    try:
+        if shape == "rect":
+            svg = shapes.rect_svg(args.x, args.y, args.w, args.h, **kw)
+        elif shape == "square":
+            svg = shapes.square_svg(args.x, args.y, args.side, **kw)
+        elif shape == "circle":
+            svg = shapes.circle_svg(args.cx, args.cy, args.r, **kw)
+        elif shape == "ellipse":
+            svg = shapes.ellipse_svg(args.cx, args.cy, args.rx, args.ry, **kw)
+        elif shape == "triangle":
+            svg = shapes.triangle_svg(args.cx, args.cy, args.side, **kw)
+        elif shape == "polygon":
+            svg = shapes.polygon_svg(args.cx, args.cy, args.r, args.sides, **kw)
+        elif shape == "star":
+            svg = shapes.star_svg(args.cx, args.cy, args.r_outer, args.r_inner, args.points, **kw)
+        elif shape == "line":
+            svg = shapes.line_svg(args.x1, args.y1, args.x2, args.y2, **kw)
+        elif shape == "text":
+            svg = shapes.text_svg(args.text, args.x, args.y, args.size, args.font, **kw)
+        else:
+            print(f"Unknown shape: {shape}", file=sys.stderr)
+            sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     with tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w") as f:
