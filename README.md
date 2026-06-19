@@ -36,6 +36,7 @@ A Python application for controlling the **CNS AxiDraw Mini 2** drawing robot. P
   - [vtracer / potrace (outline)](#vtracer--potrace-outline)
 - [Supported File Formats](#supported-file-formats)
 - [Troubleshooting](#troubleshooting)
+- [Resources & References](#resources--references)
 
 ---
 
@@ -584,3 +585,41 @@ sudo apt install potrace      # Ubuntu/Debian
 ```bash
 pip install customtkinter
 ```
+
+---
+
+## Resources & References
+
+### AxiDraw Hardware & Official Software
+
+- [AxiDraw Mini 2 — Evil Mad Scientist product page](https://shop.evilmadscientist.com/productsmenu/AxiDraw)
+- [AxiDraw documentation & user guide](https://axidraw.com/doc/py_api/)
+- [EiBotBoard firmware & USB driver](https://evil-mad.github.io/EggBot/ebb.html) — required for USB communication on all platforms
+- [AxiDraw CLI & Inkscape extension](https://github.com/evil-mad/axidraw) — official Evil Mad Scientist GitHub
+
+### Python Libraries
+
+| Library | PyPI | Description |
+|---|---|---|
+| `pyaxidraw` | [pypi.org/project/pyaxidraw](https://pypi.org/project/pyaxidraw/) | Official AxiDraw Python API |
+| `hatchsvg` | [pypi.org/project/hatchsvg](https://pypi.org/project/hatchsvg/) | Raster → hatched plotter SVG |
+| `vtracer` | [pypi.org/project/vtracer](https://pypi.org/project/vtracer/) | Raster → outline SVG tracing |
+| `customtkinter` | [pypi.org/project/customtkinter](https://pypi.org/project/customtkinter/) | Modern dark-themed tkinter GUI |
+| `Pillow` | [pypi.org/project/Pillow](https://pypi.org/project/Pillow/) | Image decoding and processing |
+
+### External Tools
+
+- [potrace](http://potrace.sourceforge.net/) — greyscale bitmap to vector outline tracer (optional CLI fallback)
+- [Inkscape](https://inkscape.org/) — free SVG editor; useful for preparing and converting files before plotting
+
+### Image Tracing References
+
+- [hatchsvg on PyPI](https://pypi.org/project/hatchsvg/) — hatching algorithm, `RenderParams` options, and CLI usage
+- [vtracer on PyPI](https://pypi.org/project/vtracer/) — colour quantisation and outline tracing parameters
+- [plottertools/hatched](https://github.com/plottertools/hatched) — alternative hatching library for reference
+- [Generative SVG for Pen Plotters (Python)](https://tabreturn.github.io/code/python/svg/thonny/2022/02/03/generative_svg_for_pen_plotters_using_python.html) — guide on generating plotter-ready SVG with Python
+
+### Pen Plotter Community
+
+- [DrawingBots.net](https://drawingbots.net/) — community resource for pen plotter tools, tips, and SVG resources
+- [r/PlotterArt](https://www.reddit.com/r/PlotterArt/) — Reddit community for pen plotter art and troubleshooting
