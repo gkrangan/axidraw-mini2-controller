@@ -222,11 +222,16 @@ class Plotter:
 
     def pen_up(self) -> None:
         self._require_connection()
+        # update() re-applies options and refreshes the interactive session state
+        # before each servo command — without it, penup/pendown are silently
+        # dropped by the EiBotBoard after the first call.
+        self._ad.update()
         self._ad.penup()
         self._pen_is_down = False
 
     def pen_down(self) -> None:
         self._require_connection()
+        self._ad.update()
         self._ad.pendown()
         self._pen_is_down = True
 
@@ -238,6 +243,7 @@ class Plotter:
         """Move to absolute position (inches) with pen up."""
         self._require_connection()
         self._check_bounds(x, y)
+        self._ad.update()
         self._ad.moveto(x, y)
         self._pos_x, self._pos_y = x, y
 
@@ -249,6 +255,7 @@ class Plotter:
         """Draw to absolute position (inches) with pen down."""
         self._require_connection()
         self._check_bounds(x, y)
+        self._ad.update()
         self._ad.lineto(x, y)
         self._pos_x, self._pos_y = x, y
 
@@ -276,6 +283,7 @@ class Plotter:
     def go_origin(self) -> None:
         """Move to machine origin (0, 0) — where the carriage was on connect."""
         self._require_connection()
+        self._ad.update()
         self._ad.moveto(0, 0)
         self._pos_x, self._pos_y = 0.0, 0.0
 
@@ -323,11 +331,13 @@ class Plotter:
 
     def enable_motors(self) -> None:
         self._require_connection()
+        self._ad.update()
         self._ad.enable_motors()
         self._motors_enabled = True
 
     def disable_motors(self) -> None:
         self._require_connection()
+        self._ad.update()
         self._ad.disable_motors()
         self._motors_enabled = False
 
