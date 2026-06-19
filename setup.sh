@@ -48,7 +48,13 @@ echo "Virtual environment activated."
 # ---- Upgrade pip silently ----
 pip install --upgrade pip --quiet
 
-# ---- Install dependencies ----
+# ---- Install pyaxidraw (not on PyPI — distributed by Evil Mad Scientist) ----
+echo ""
+echo "Installing pyaxidraw from Evil Mad Scientist ..."
+pip install https://cdn.evilmadscientist.com/dl/ad/public/AxiDraw_API.zip
+echo "pyaxidraw installed."
+
+# ---- Install remaining dependencies ----
 echo ""
 echo "Installing dependencies from requirements.txt ..."
 pip install -r "$PROJECT_DIR/requirements.txt"

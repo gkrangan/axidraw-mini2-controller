@@ -695,8 +695,10 @@ Outline tracers convert raster images to vector outlines without fill. `vtracer`
 - On macOS, you may need to install the EiBotBoard USB driver from Evil Mad Scientist
 
 **`pyaxidraw` not found**
+
+`pyaxidraw` is not on PyPI. Install it directly from Evil Mad Scientist:
 ```bash
-pip install pyaxidraw
+pip install https://cdn.evilmadscientist.com/dl/ad/public/AxiDraw_API.zip
 ```
 
 **`hatchsvg` not found**
