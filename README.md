@@ -4,6 +4,14 @@ A Python application for controlling the **CNS AxiDraw Mini 2** drawing robot. P
 
 ---
 
+## Gallery
+
+| First plot — rectangle and star | Shapes + text in action | Pen mount close-up |
+|:---:|:---:|:---:|
+| ![First plot](assets/photos/axidraw-first-plot.jpeg) | ![Shapes and text](assets/photos/axidraw-shapes-text.jpeg) | ![Pen close-up](assets/photos/axidraw-pen-closeup.jpeg) |
+
+---
+
 ## Table of Contents
 
 - [Features](#features)
